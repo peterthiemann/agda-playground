@@ -5,7 +5,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.List using (List; []; _∷_; _++_; reverse) renaming (map to mapᴸ)
 open import Data.Unit using (⊤; tt)
 
-open import Data.Product using (Σ; proj₁; proj₂; _,_)
+open import Data.Product using (Σ; proj₁; proj₂; _,_; _×_; ∃-syntax)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 
 open import Relation.Nullary using (Dec)
@@ -121,7 +121,9 @@ Typed = Σ Type T⟦_⟧
 
 
 compare : ∀ {cty} → Comparable cty → T⟦ cty ⟧ → T⟦ cty ⟧ → Bool
+compare {address} comp v₁ v₂ = {!!}
 compare {bool} comp v₁ v₂ = ⌊ v₁ ≟ᴮ v₂ ⌋
+compare {chain-id} comp v₁ v₂ = {!!}
 compare {int} comp v₁ v₂ = ⌊ v₁ ≟ℤ v₂ ⌋
 compare {key-hash} comp v₁ v₂ = ⌊ KeyHash.hashcode v₁ ≟S KeyHash.hashcode v₂ ⌋
 compare {mutez} comp v₁ v₂ = ⌊ Mutez.amount v₁ ≟ᴺ Mutez.amount v₂ ⌋
@@ -136,6 +138,7 @@ compare {or cty cty₁} comp (inj₂ y) (inj₁ x) = false
 compare {or cty cty₁} (comp₁ , comp₂) (inj₂ y₁) (inj₂ y₂) = compare comp₂ y₁ y₂
 compare {pair cty cty₁} (comp₁ , comp₂) v₁ v₂ = compare comp₁ (proj₁ v₁) (proj₁ v₂) ∧ compare comp₂ (proj₂ v₁) (proj₂ v₂)
 compare {string} comp v₁ v₂ = ⌊ v₁ ≟S v₂ ⌋
+compare {timestamp} comp v₁ v₂ = ⌊ Timestamp.instant v₁ ≟ℤ Timestamp.instant v₂ ⌋
 compare {unit} comp v₁ v₂ = true
 
 Stepping : Set₁
@@ -146,16 +149,26 @@ variable
   n₁ n₂ : ℕ
   z₁ z₂ : ℤ
   m₁ m₂ : Mutez
+  t₁ t₂ : Timestamp
+
+SingleStep : Set₁
+SingleStep = List Typed → Typed → Set
+
+data _/_↓_ : Instruction → SingleStep where
+  ⊢ABS₁  : ABS / [_]   (int , z₁)           ↓ (nat , ∣ z₁ ∣)
+  ⊢ADD₁  : ADD / [_,_] (nat , n₁) (nat , n₂) ↓ (nat , n₁ + n₂)
+  ⊢ADD₂  : ADD / [_,_] (nat , n₁) (int , z₂) ↓ (int , (+ n₁) +ℤ z₂ )
+  ⊢ADD₃  : ADD / [_,_] (int , z₁) (nat , n₂) ↓ (int , z₁ +ℤ (+ n₂))
+  ⊢ADD₄  : ADD / [_,_] (int , z₁) (int , z₂) ↓ (int , z₁ +ℤ z₂)
+  ⊢ADD₅  : ADD / [_,_] (timestamp , t₁) (int , z₂) ↓ (timestamp , record { instant = Timestamp.instant t₁ +ℤ z₂ })
+  ⊢ADD₆  : ADD / [_,_] (int , z₁) (timestamp , t₂) ↓ (timestamp , record { instant = z₁ +ℤ Timestamp.instant t₂ })
+  ⊢ADD₇  : ADD / [_,_] (mutez , m₁) (mutez , m₂) ↓ (mutez , record { amount = Mutez.amount m₁ + Mutez.amount m₂ })
+
 
 data _/_↝_ : Instruction → Stepping where
-  ⊢ABS₁  : ABS / ((int , z₁) ∷ tyds) ↝ ((nat , ∣ z₁ ∣) ∷ tyds)
-  ⊢ADD₁  : ADD / ((nat , n₁) ∷ (nat , n₂) ∷ tyds) ↝ ((nat , n₁ + n₂) ∷ tyds)
-  ⊢ADD₂  : ADD / ((nat , n₁) ∷ (int , z₂) ∷ tyds) ↝ ((int , (+ n₁) +ℤ z₂ ) ∷ tyds)
-  ⊢ADD₃  : ADD / ((int , z₁) ∷ (nat , n₂) ∷ tyds) ↝ ((int , z₁ +ℤ (+ n₂)) ∷ tyds)
-  ⊢ADD₄  : ADD / ((int , z₁) ∷ (int , z₂) ∷ tyds) ↝ ((int , z₁ +ℤ z₂) ∷ tyds)
-  -- ⊢ADD₅  : ADD / (timestamp ∷ int ∷ tys) ⇒ (timestamp ∷ tys)
-  -- ⊢ADD₆  : ADD / (int ∷ timestamp ∷ tys) ⇒ (timestamp ∷ tys)
-  ⊢ADD₇  : ADD / ((mutez , m₁) ∷ (mutez , m₂) ∷ tyds) ↝ ((mutez , record { amount = Mutez.amount m₁ + Mutez.amount m₂ }) ∷ tyds)
+  single : ∀ {tyds : List Typed} {ins ts-in t-out}
+    → ins / ts-in ↓ t-out
+    → ins / ts-in ++ tyds ↝ (t-out ∷ tyds)
   -- ⊢ADD₈  : ADD / (bls12-381-g1 ∷ bls12-381-g1 ∷ tys) ⇒ (bls12-381-g1 ∷ tys)
   -- ⊢ADD₉  : ADD / (bls12-381-g2 ∷ bls12-381-g2 ∷ tys) ⇒ (bls12-381-g2 ∷ tys)
   -- ⊢ADD₁₀ : ADD / (bls12-381-fr ∷ bls12-381-fr ∷ tys) ⇒ (bls12-381-fr ∷ tys)
@@ -172,20 +185,23 @@ data _//_↝_ : List Instruction → Stepping where
     → (ins ∷ inss) // tyds₁ ↝ tyds₃
 
 ⊨prg₁ : prg₁ // tyds ↝ ((nat , 42) ∷ tyds)
-⊨prg₁ = ⊢PUSH₁ ∷ (⊢PUSH₁ ∷ (⊢ADD₁ ∷ []))
+⊨prg₁ = ⊢PUSH₁ ∷ (⊢PUSH₁ ∷ (single ⊢ADD₁ ∷ []))
 
 ⊨prg₂ : prg₂ // tyds ↝ ((bool , false) ∷ tyds)
 ⊨prg₂ = ⊢PUSH₁ ∷ (⊢PUSH₁ ∷ (⊢COMPARE₁ nat tt ∷ []))
 
+
 single-stepping-is-typed : ∀ {ins tyds-in tyds-out}
   → ins / tyds-in ↝ tyds-out
   → ins / ∥ tyds-in ∥* ⇒ ∥ tyds-out ∥*
-single-stepping-is-typed ⊢ABS₁ = ⊢ABS₁
-single-stepping-is-typed ⊢ADD₁ = ⊢ADD₁
-single-stepping-is-typed ⊢ADD₂ = ⊢ADD₂
-single-stepping-is-typed ⊢ADD₃ = ⊢ADD₃
-single-stepping-is-typed ⊢ADD₄ = ⊢ADD₄
-single-stepping-is-typed ⊢ADD₇ = ⊢ADD₇
+single-stepping-is-typed (single ⊢ABS₁) = ⊢ABS₁
+single-stepping-is-typed (single ⊢ADD₁) = ⊢ADD₁
+single-stepping-is-typed (single ⊢ADD₂) = ⊢ADD₂
+single-stepping-is-typed (single ⊢ADD₃) = ⊢ADD₃
+single-stepping-is-typed (single ⊢ADD₄) = ⊢ADD₄
+single-stepping-is-typed (single ⊢ADD₅) = ⊢ADD₅
+single-stepping-is-typed (single ⊢ADD₆) = ⊢ADD₆
+single-stepping-is-typed (single ⊢ADD₇) = ⊢ADD₇
 single-stepping-is-typed (⊢COMPARE₁ cty comp) = ⊢COMPARE₁ cty comp
 single-stepping-is-typed ⊢PUSH₁ = ⊢PUSH₁
 
@@ -194,6 +210,7 @@ stepping-is-typed : ∀ {inss tyds-in tyds-out}
   → inss // ∥ tyds-in ∥* ⇒ ∥ tyds-out ∥*
 stepping-is-typed [] = []
 stepping-is-typed (single-step ∷ stepping) = single-stepping-is-typed single-step ∷ stepping-is-typed stepping
+
 
 -- configuration
 
@@ -238,6 +255,28 @@ data conf-step : Configuration → Configuration → Set where
   ⊢MAP₄  : ∀ {inss-body ty-out y ys xs}
     → conf-step ⟪ MAP″ inss-body ∷ inss ,               (ty-out , y) ∷ tyds , (list ty-out ,     ys) ∷ (list ty , xs) ∷ shadow ⟫
                 ⟪ MAP′ inss-body ∷ inss ,                              tyds , (list ty-out , y ∷ ys) ∷ (list ty , xs) ∷ shadow ⟫
+
+-- block chain stuff for a single contract
+
+record ContractState (ty : Type) : Set where
+  field
+    amount : Mutez
+    balance : Mutez
+    chainId : ChainId
+    active-contracts : List (Address × (∃[ ty ] Contract ty))
+    level : ℕ
+    now : Timestamp
+    self : Contract ty
+    self-address : Address
+    sender : Address
+    source : Address
+    total-voting-power : ℕ
+    voting-power : KeyHash → ℕ
+
+postulate
+  getContract  : ContractState ty → Address → Maybe (∃[ ty ] Contract ty)
+  freshAddress : ContractState ty → Address × ContractState ty
+
 
 {-
 data ⊢ADD : Typing where

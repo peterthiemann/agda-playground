@@ -141,6 +141,10 @@ Pushable unit = ⊤
 
 data NotImplemented : Set where
 
+record Address : Set where
+
+record ChainId : Set where
+
 record Contract (ty : Type) : Set where
 
 record KeyHash : Set where
@@ -153,6 +157,9 @@ record Mutez : Set where
 record MSet (A : Set) : Set where
   field
     contents : List A
+record Timestamp : Set where
+  field
+    instant : ℤ
 
 record Code (pty : Type) (sty : Type) : Set where
 
@@ -162,14 +169,14 @@ data Operation : Set where
   TRANSFER-TOKENS : (ty : Type) → Mutez → Contract ty → Operation
 
 T⟦_⟧ : Type → Set
-T⟦ address ⟧ = NotImplemented
+T⟦ address ⟧ = Address
 T⟦ big-map t t₁ ⟧ = NotImplemented
 T⟦ bls12-381-fr ⟧ = NotImplemented
 T⟦ bls12-381-g1 ⟧ = NotImplemented
 T⟦ bls12-381-g2 ⟧ = NotImplemented
 T⟦ bool ⟧ = Bool
 T⟦ bytes ⟧ = NotImplemented
-T⟦ chain-id ⟧ = NotImplemented
+T⟦ chain-id ⟧ = ChainId
 T⟦ contract t ⟧ = Contract t
 T⟦ int ⟧ = ℤ
 T⟦ key ⟧ = NotImplemented
@@ -190,6 +197,6 @@ T⟦ set t ⟧ = MSet T⟦ t ⟧
 T⟦ signature ⟧ = NotImplemented
 T⟦ string ⟧ = String
 T⟦ ticket t ⟧ = NotImplemented
-T⟦ timestamp ⟧ = NotImplemented
+T⟦ timestamp ⟧ = Timestamp
 T⟦ unit ⟧ = ⊤
 
