@@ -16,6 +16,7 @@ open import Relation.Binary.PropositionalEquality
 
 pattern [_] x = x ∷ []
 pattern [_,_] x y = x ∷ y ∷ []
+pattern [_,_,_] x y z = x ∷ y ∷ z ∷ []
 
 open import Data.Nat using (ℕ; _+_) renaming (_≟_ to _≟ᴺ_)
 open import Data.Integer using (ℤ; ∣_∣; +_) renaming (_≟_ to _≟ℤ_; _+_ to _+ℤ_)
@@ -215,7 +216,7 @@ data conf-step : Configuration → Configuration → Set where
 
 -- block chain stuff for a single contract
 
-record ContractState (ty : Type) : Set where
+record ContractState : Set where
   field
     amount : Mutez
     balance : Mutez
@@ -223,7 +224,8 @@ record ContractState (ty : Type) : Set where
     active-contracts : List (Address × (∃[ ty ] Contract ty))
     level : ℕ
     now : Timestamp
-    self : Contract ty
+    myty : Type
+    self : Contract myty
     self-address : Address
     sender : Address
     source : Address
@@ -231,9 +233,29 @@ record ContractState (ty : Type) : Set where
     voting-power : KeyHash → ℕ
 
 postulate
-  getContract  : ContractState ty → Address → Maybe (∃[ ty ] Contract ty)
-  freshAddress : ContractState ty → Address × ContractState ty
+  getContract  : ContractState → Address → (ty : Type) → Maybe (Contract ty)
+  freshAddress : ContractState → Address × ContractState
 
+variable
+  cs cs′ : ContractState
+  a  : Address
+  kh : KeyHash
+  mkh : Maybe KeyHash
+  m  : Mutez
+
+data _/_↓_/_↝_ : Instruction → List Typed → List Typed → ContractState → ContractState → Set where
+  ⊨SELF-ADDRESS    : SELF-ADDRESS / [] ↓ [(address , ContractState.self-address cs)] / cs ↝ cs
+  ⊨AMOUNT          : AMOUNT       / [] ↓ [(mutez ,   ContractState.amount cs)] / cs ↝ cs
+  ⊨CONTRACT        : CONTRACT ty  / [(address , a)] ↓ [(option (contract ty) , getContract cs a ty)] / cs ↝ cs
+  ⊨SELF            : SELF         / [] ↓ [(contract (ContractState.myty cs) , ContractState.self cs)] / cs ↝ cs
+  ⊨CREATE-CONTRACT : ∀ {pty sty inss v} → freshAddress cs ≡ (a , cs′) →
+     CREATE-CONTRACT pty sty inss / [_,_,_] (option key-hash , mkh) (mutez , m) (sty , v) ↓ [_,_] (operation , CREATE-CONTRACT pty sty inss) (address , a) / cs ↝ cs′
+  ⊨SET-DELEGATE    : SET-DELEGATE / [(option key-hash , mkh)] ↓ [(operation , SET-DELEGATE mkh)] / cs ↝ cs
+  ⊨TRANSFER-TOKENS : ∀ {v cty} →
+                  TRANSFER-TOKENS / [_,_,_] (ty , v) (mutez , m) (contract ty , cty) ↓ [(operation , TRANSFER-TOKENS ty m cty)] / cs ↝ cs
+  ⊨TOTAL-VOTING-POWER :
+               TOTAL-VOTING-POWER / [] ↓ [(nat , ContractState.total-voting-power cs)] / cs ↝ cs
+  ⊨VOTING-POWER    : VOTING-POWER / [(key-hash , kh)] ↓ [(nat , ContractState.voting-power cs kh)] / cs ↝ cs
 
 {-
 data ⊢ADD : Typing where
