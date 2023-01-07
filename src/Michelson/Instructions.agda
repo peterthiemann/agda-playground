@@ -23,49 +23,6 @@ open import Data.String using (String) renaming (_≟_ to _≟S_)
 
 open import Michelson.Types
 
-data Instruction : Set where
-  -- control structures
-  APPLY EXEC FAILWITH : Instruction
-  IF IF-CONS IF-LEFT IF-NONE : List Instruction → List Instruction → Instruction
-  ITER ITER′ : List Instruction → Instruction
-  LAMBDA LAMBDA-REC : Type → Type → List Instruction → Instruction
-  LOOP LOOP-LEFT : List Instruction → Instruction
-  -- stack manipulation
-  DIG : ℕ → Instruction
-  DIP : ℕ → List Instruction → Instruction
-  DROP : ℕ → Instruction
-  DUG : ℕ → Instruction
-  DUP : ℕ → Instruction
-  PUSH : (t : Type) → T⟦ t ⟧ → Instruction
-  SWAP : Instruction
-  -- arithmetic operations
-  ABS ADD COMPARE EDIV : Instruction
-  EQ GE GT INT ISNAT LE LSL LSR LT : Instruction
-  MUL NEG NEQ SUB : Instruction
-  -- boolean operations
-  AND NOT OR XOR : Instruction
-  -- cryptographic operations
-  -- ...
-  -- blockchain operations
-  -- ...
-  -- operations on data structures
-  CAR CDR CONCAT CONS : Instruction
-  EMPTY-BIG-MAP EMPTY-MAP : Type → Type → Instruction
-  EMPTY-SET : Type → Instruction
-  GET : Instruction
-  GET-N : ℕ → Instruction
-  GET-AND-UPDATE : Instruction
-  LEFT : Type → Instruction
-  MAP MAP′ MAP″ : List Instruction → Instruction
-  MEM NEVER : Instruction
-  NIL NONE : Type → Instruction
-  PACK : Instruction
-  PAIR : ℕ → Instruction
-  RIGHT SIZE SLICE SOME UNIT : Instruction
-  UNPAIR : ℕ → Instruction
-  UPDATE : Instruction
-  UPDATE-N : ℕ → Instruction
-
 variable
   ty : Type
   tys : List Type
@@ -87,7 +44,7 @@ data _/_⇒_ : Instruction → Typing where
   ⊢ADD₁₀ : ADD / (bls12-381-fr ∷ bls12-381-fr ∷ tys) ⇒ (bls12-381-fr ∷ tys)
   ⊢COMPARE₁ : (cty : Type) → Comparable cty → COMPARE / (cty ∷ cty ∷ tys) ⇒ (bool ∷ tys)
 
-  ⊢PUSH₁ : ∀ {x} → (PUSH ty x) / tys ⇒ (ty ∷ tys)
+  ⊢PUSH₁ : ∀ {x} {pushable : Pushable ty} → (PUSH ty x) / tys ⇒ (ty ∷ tys)
 
 data _//_⇒_ : List Instruction → Typing where
   []  : [] // tys ⇒ tys
@@ -97,13 +54,13 @@ data _//_⇒_ : List Instruction → Typing where
     → (ins ∷ inss) // tys₁ ⇒ tys₃
 
 prg₁ : List Instruction
-prg₁ = PUSH nat 40 ∷ PUSH nat 2 ∷ ADD ∷ []
+prg₁ = PUSH nat (L-nat 40) ∷ PUSH nat (L-nat 2) ∷ ADD ∷ []
 
 ⊢prg₁ : prg₁ // tys ⇒ (nat ∷ tys)
 ⊢prg₁ = ⊢PUSH₁ ∷ (⊢PUSH₁ ∷ (⊢ADD₁ ∷ []))
 
 prg₂ : List Instruction
-prg₂ = PUSH nat 40 ∷ PUSH nat 2 ∷ COMPARE ∷ []
+prg₂ = PUSH nat (L-nat 40) ∷ PUSH nat (L-nat 2) ∷ COMPARE ∷ []
 
 ⊢prg₂ : prg₂ // tys ⇒ (bool ∷ tys)
 ⊢prg₂ = ⊢PUSH₁ ∷ (⊢PUSH₁ ∷ (⊢COMPARE₁ nat tt ∷ []))
@@ -121,9 +78,9 @@ Typed = Σ Type T⟦_⟧
 
 
 compare : ∀ {cty} → Comparable cty → T⟦ cty ⟧ → T⟦ cty ⟧ → Bool
-compare {address} comp v₁ v₂ = {!!}
+compare {address} comp v₁ v₂ = ⌊ Address.rep v₁ ≟S Address.rep v₂ ⌋
 compare {bool} comp v₁ v₂ = ⌊ v₁ ≟ᴮ v₂ ⌋
-compare {chain-id} comp v₁ v₂ = {!!}
+compare {chain-id} comp v₁ v₂ = ⌊ ChainId.rep v₁ ≟ᴺ ChainId.rep v₂ ⌋
 compare {int} comp v₁ v₂ = ⌊ v₁ ≟ℤ v₂ ⌋
 compare {key-hash} comp v₁ v₂ = ⌊ KeyHash.hashcode v₁ ≟S KeyHash.hashcode v₂ ⌋
 compare {mutez} comp v₁ v₂ = ⌊ Mutez.amount v₁ ≟ᴺ Mutez.amount v₂ ⌋
@@ -149,7 +106,7 @@ variable
   n₁ n₂ : ℕ
   z₁ z₂ : ℤ
   m₁ m₂ : Mutez
-  t₁ t₂ : Timestamp
+  ts₁ ts₂ : Timestamp
 
 SingleStep : Set₁
 SingleStep = List Typed → Typed → Set
@@ -160,8 +117,8 @@ data _/_↓_ : Instruction → SingleStep where
   ⊢ADD₂  : ADD / [_,_] (nat , n₁) (int , z₂) ↓ (int , (+ n₁) +ℤ z₂ )
   ⊢ADD₃  : ADD / [_,_] (int , z₁) (nat , n₂) ↓ (int , z₁ +ℤ (+ n₂))
   ⊢ADD₄  : ADD / [_,_] (int , z₁) (int , z₂) ↓ (int , z₁ +ℤ z₂)
-  ⊢ADD₅  : ADD / [_,_] (timestamp , t₁) (int , z₂) ↓ (timestamp , record { instant = Timestamp.instant t₁ +ℤ z₂ })
-  ⊢ADD₆  : ADD / [_,_] (int , z₁) (timestamp , t₂) ↓ (timestamp , record { instant = z₁ +ℤ Timestamp.instant t₂ })
+  ⊢ADD₅  : ADD / [_,_] (timestamp , ts₁) (int , z₂) ↓ (timestamp , record { instant = Timestamp.instant ts₁ +ℤ z₂ })
+  ⊢ADD₆  : ADD / [_,_] (int , z₁) (timestamp , ts₂) ↓ (timestamp , record { instant = z₁ +ℤ Timestamp.instant ts₂ })
   ⊢ADD₇  : ADD / [_,_] (mutez , m₁) (mutez , m₂) ↓ (mutez , record { amount = Mutez.amount m₁ + Mutez.amount m₂ })
 
 
@@ -175,7 +132,7 @@ data _/_↝_ : Instruction → Stepping where
   ⊢COMPARE₁ : (cty : Type) → {v₁ v₂ : T⟦ cty ⟧} → (comp : Comparable cty)
     → COMPARE / ((cty , v₁) ∷ (cty , v₂) ∷ tyds) ↝ ((bool , compare comp v₁ v₂) ∷ tyds)
 
-  ⊢PUSH₁ : ∀ {x} → (PUSH ty x) / tyds ↝ ((ty , x) ∷ tyds)
+  ⊢PUSH₁ : ∀ {l} {pushable : Pushable ty} → PUSH ty l / tyds ↝ ((ty , L⟦ l ⟧) ∷ tyds)
   
 data _//_↝_ : List Instruction → Stepping where
   []  : [] // tyds ↝ tyds
@@ -203,7 +160,7 @@ single-stepping-is-typed (single ⊢ADD₅) = ⊢ADD₅
 single-stepping-is-typed (single ⊢ADD₆) = ⊢ADD₆
 single-stepping-is-typed (single ⊢ADD₇) = ⊢ADD₇
 single-stepping-is-typed (⊢COMPARE₁ cty comp) = ⊢COMPARE₁ cty comp
-single-stepping-is-typed ⊢PUSH₁ = ⊢PUSH₁
+single-stepping-is-typed (⊢PUSH₁ {pushable = pushable}) = ⊢PUSH₁ {pushable = pushable}
 
 stepping-is-typed : ∀ {inss tyds-in tyds-out}
   → inss // tyds-in ↝ tyds-out
