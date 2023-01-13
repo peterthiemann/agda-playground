@@ -1,3 +1,4 @@
+{-# OPTIONS --no-positivity-check #-}
 module Michelson.Types where
 
 open import Data.Bool using (Bool)
@@ -7,9 +8,13 @@ open import Data.List using (List) renaming (map to mapᴸ)
 open import Data.Maybe using (Maybe) renaming (map to mapᴹ)
 open import Data.Nat using (ℕ)
 open import Data.Product using (_×_; _,_)
-open import Data.String using (String)
+open import Data.String using (String) renaming (_≟_ to _≟S_)
 open import Data.Sum using (_⊎_; inj₁; inj₂) renaming (map to map⁺)
 open import Data.Unit using (⊤; tt)
+
+open import Relation.Nullary using (Dec; yes; no)
+open import Relation.Binary.PropositionalEquality
+  using (_≡_; _≢_; refl; sym; trans; cong; cong₂; subst; resp₂)
 
 data Type : Set where
   address : Type
@@ -335,6 +340,12 @@ record Address : Set where
   field
     rep : String
 
+_≟A_ : (a₁ a₂ : Address) → Dec (a₁ ≡ a₂)
+a₁ ≟A a₂
+  with Address.rep a₁ ≟S Address.rep a₂
+... | no ¬p = no (λ{ refl → ¬p refl})
+... | yes refl = yes refl
+
 record ChainId : Set where
   field
     rep : ℕ
@@ -363,10 +374,7 @@ record Code : Set where
     storety : Type
     body    : List Instruction
 
-data Operation : Set where
-  CREATE-CONTRACT : (pty : Type) (sty : Type) → List Instruction → Operation
-  SET-DELEGATE    : Maybe KeyHash → Operation
-  TRANSFER-TOKENS : (ty : Type) → Mutez → Contract ty → Operation
+data Operation : Set
 
 T⟦_⟧ : Type → Set
 T⟦ address ⟧ = Address
@@ -399,6 +407,13 @@ T⟦ string ⟧ = String
 T⟦ ticket t ⟧ = NotImplemented
 T⟦ timestamp ⟧ = Timestamp
 T⟦ unit ⟧ = ⊤
+
+-- Operation is not strictly positive because of the back reference to T⟦_⟧
+-- however, ¬ Passable Operation, so that the potentially cyclic case runs empty
+data Operation where
+  CREATE-CONTRACT : Address → (pty : Type) (sty : Type) → List Instruction → Operation
+  SET-DELEGATE    : Address → Maybe KeyHash → Operation
+  TRANSFER-TOKENS : (ty : Type) → Passable ty → T⟦ ty ⟧ → Mutez → Contract ty → Operation
 
 L⟦_⟧ : Literal t → T⟦ t ⟧
 L⟦ L-nat x ⟧ = x

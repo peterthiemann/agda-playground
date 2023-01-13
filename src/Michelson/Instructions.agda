@@ -8,7 +8,7 @@ open import Data.Unit using (⊤; tt)
 open import Data.Product using (Σ; proj₁; proj₂; _,_; _×_; ∃-syntax)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 
-open import Relation.Nullary using (Dec)
+open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Nullary.Decidable using (⌊_⌋)
 
 open import Relation.Binary.PropositionalEquality
@@ -18,7 +18,7 @@ pattern [_] x = x ∷ []
 pattern [_,_] x y = x ∷ y ∷ []
 pattern [_,_,_] x y z = x ∷ y ∷ z ∷ []
 
-open import Data.Nat using (ℕ; _+_) renaming (_≟_ to _≟ᴺ_)
+open import Data.Nat using (ℕ; _+_; _≤_) renaming (_≟_ to _≟ᴺ_)
 open import Data.Integer using (ℤ; ∣_∣; +_) renaming (_≟_ to _≟ℤ_; _+_ to _+ℤ_)
 open import Data.String using (String) renaming (_≟_ to _≟S_)
 
@@ -216,84 +216,140 @@ data conf-step : Configuration → Configuration → Set where
 
 -- block chain stuff for a single contract
 
-record ContractState : Set where
+record ContractInvocationState : Set where
   field
+    self-address : Address
     amount : Mutez
     balance : Mutez
     chainId : ChainId
-    active-contracts : List (Address × (∃[ ty ] Contract ty))
+    active-contracts : List (Address × Type)
     level : ℕ
     now : Timestamp
     myty : Type
     self : Contract myty
-    self-address : Address
     sender : Address
     source : Address
     total-voting-power : ℕ
     voting-power : KeyHash → ℕ
 
+getContract  : ContractInvocationState → Address → (ty : Type) → Maybe (Contract ty)
+getContract cs addr ty = lookup (ContractInvocationState.active-contracts cs)
+  where
+    lookup : List (Address × Type) → Maybe (Contract ty)
+    lookup [] = nothing
+    lookup ((my-addr , my-type) ∷ active)
+      with my-addr ≟A addr
+    ... | yes refl = just (record { rep = my-addr })
+    ... | no addr≢ = lookup active
+
 postulate
-  getContract  : ContractState → Address → (ty : Type) → Maybe (Contract ty)
-  freshAddress : ContractState → Address × ContractState
+  freshAddress : ContractInvocationState → Type → Address × ContractInvocationState
+
+CS-consistent : ContractInvocationState → Set
+CS-consistent cs = getContract cs (ContractInvocationState.self-address cs) (ContractInvocationState.myty cs) ≡ just (record { rep = ContractInvocationState.self-address cs })
 
 variable
-  cs cs′ : ContractState
+  cs cs′ : ContractInvocationState
   a  : Address
   kh : KeyHash
   mkh : Maybe KeyHash
   m  : Mutez
 
-data _/_↓_/_↝_ : Instruction → List Typed → List Typed → ContractState → ContractState → Set where
-  ⊨SELF-ADDRESS    : SELF-ADDRESS / [] ↓ [(address , ContractState.self-address cs)] / cs ↝ cs
-  ⊨AMOUNT          : AMOUNT       / [] ↓ [(mutez ,   ContractState.amount cs)] / cs ↝ cs
+data _/_↓_/_↝_ : Instruction → List Typed → List Typed → ContractInvocationState → ContractInvocationState → Set where
+  ⊨SELF-ADDRESS    : SELF-ADDRESS / [] ↓ [(address , ContractInvocationState.self-address cs)] / cs ↝ cs
+  ⊨AMOUNT          : AMOUNT       / [] ↓ [(mutez ,   ContractInvocationState.amount cs)] / cs ↝ cs
+  ⊨BALANCE         : BALANCE      / [] ↓ [(mutez ,   ContractInvocationState.balance cs)] / cs ↝ cs
+  ⊨CHAIN-ID        : CHAIN-ID     / [] ↓ [(chain-id , ContractInvocationState.chainId cs)] / cs ↝ cs
   ⊨CONTRACT        : CONTRACT ty  / [(address , a)] ↓ [(option (contract ty) , getContract cs a ty)] / cs ↝ cs
-  ⊨SELF            : SELF         / [] ↓ [(contract (ContractState.myty cs) , ContractState.self cs)] / cs ↝ cs
-  ⊨CREATE-CONTRACT : ∀ {pty sty inss v} → freshAddress cs ≡ (a , cs′) →
-     CREATE-CONTRACT pty sty inss / [_,_,_] (option key-hash , mkh) (mutez , m) (sty , v) ↓ [_,_] (operation , CREATE-CONTRACT pty sty inss) (address , a) / cs ↝ cs′
-  ⊨SET-DELEGATE    : SET-DELEGATE / [(option key-hash , mkh)] ↓ [(operation , SET-DELEGATE mkh)] / cs ↝ cs
-  ⊨TRANSFER-TOKENS : ∀ {v cty} →
-                  TRANSFER-TOKENS / [_,_,_] (ty , v) (mutez , m) (contract ty , cty) ↓ [(operation , TRANSFER-TOKENS ty m cty)] / cs ↝ cs
+  ⊨LEVEL           : LEVEL        / [] ↓ [(nat , ContractInvocationState.level cs)] / cs ↝ cs
+  ⊨SELF            : SELF         / [] ↓ [(contract (ContractInvocationState.myty cs) , ContractInvocationState.self cs)] / cs ↝ cs
+  ⊨CREATE-CONTRACT : ∀ {pty sty inss v} → freshAddress cs pty ≡ (a , cs′) →
+     CREATE-CONTRACT pty sty inss / [_,_,_] (option key-hash , mkh) (mutez , m) (sty , v) ↓ [_,_] (operation , CREATE-CONTRACT a pty sty inss) (address , a) / cs ↝ cs′
+  ⊨SET-DELEGATE    : SET-DELEGATE / [(option key-hash , mkh)] ↓ [(operation , SET-DELEGATE (ContractInvocationState.self-address cs) mkh)] / cs ↝ cs
+  ⊨TRANSFER-TOKENS : ∀ {v cty} → (passable-ty : Passable ty) →
+                  TRANSFER-TOKENS / [_,_,_] (ty , v) (mutez , m) (contract ty , cty) ↓ [(operation , TRANSFER-TOKENS ty passable-ty v m cty)] / cs ↝ cs
   ⊨TOTAL-VOTING-POWER :
-               TOTAL-VOTING-POWER / [] ↓ [(nat , ContractState.total-voting-power cs)] / cs ↝ cs
-  ⊨VOTING-POWER    : VOTING-POWER / [(key-hash , kh)] ↓ [(nat , ContractState.voting-power cs kh)] / cs ↝ cs
+               TOTAL-VOTING-POWER / [] ↓ [(nat , ContractInvocationState.total-voting-power cs)] / cs ↝ cs
+  ⊨VOTING-POWER    : VOTING-POWER / [(key-hash , kh)] ↓ [(nat , ContractInvocationState.voting-power cs kh)] / cs ↝ cs
 
-{-
-data ⊢ADD : Typing where
-  ⊢ADD₁  : ⊢ADD [ nat , nat ] [ nat ]
-  ⊢ADD₂  : ⊢ADD [ nat , int ] [ int ]
-  ⊢ADD₃  : ⊢ADD [ int , nat ] [ int ]
-  ⊢ADD₄  : ⊢ADD [ int , int ] [ int ]
-  ⊢ADD₅  : ⊢ADD [ timestamp , int ] [ timestamp ]
-  ⊢ADD₆  : ⊢ADD [ int , timestamp ] [ timestamp ]
-  ⊢ADD₇  : ⊢ADD [ mutez , mutez ] [ mutez ]
-  ⊢ADD₈  : ⊢ADD [ bls12-381-g1 , bls12-381-g1 ] [ bls12-381-g1 ]
-  ⊢ADD₉  : ⊢ADD [ bls12-381-g2 , bls12-381-g2 ] [ bls12-381-g2 ]
-  ⊢ADD₁₀ : ⊢ADD [ bls12-381-fr , bls12-381-fr ] [ bls12-381-fr ]
+module example-blockchain-instructions where
 
-data ⊢COMPARE : Typing where
-  ⊢COMPARE₁ : (cty : Type) → Comparable cty → ⊢COMPARE [ cty , cty ] [ bool ]
+  contract-sender : Address
+  contract-sender = record { rep = "yz9F023030" }
 
-data ⊢EDIV : Typing where
-  ⊢EDIV₁ : ⊢EDIV [ nat , nat ] [ option (pair nat nat) ]
-  ⊢EDIV₂ : ⊢EDIV [ nat , int ] [ option (pair int nat) ]
-  ⊢EDIV₃ : ⊢EDIV [ int , nat ] [ option (pair int nat) ]
-  ⊢EDIV₄ : ⊢EDIV [ int , int ] [ option (pair int nat) ]
-  ⊢EDIV₅ : ⊢EDIV [ mutez , nat ] [ option (pair mutez mutez) ]
-  ⊢EDIV₆ : ⊢EDIV [ mutez , mutez ] [ option (pair nat mutez) ]
+  contract-address : Address
+  contract-address = record { rep = "tzBCx78efg" }
 
-data ⊢EQ : Typing where
-  ⊢EQ₁ : ⊢EQ [ int ] [ bool ]
+  contract-type : Type
+  contract-type = mutez
 
-data ⊢GE : Typing where
-  ⊢GE₁ : ⊢GE [ int ] [ bool ]
+  contract-state : ContractInvocationState
+  contract-state = record
+                     { amount = record { amount = 100 }
+                     ; balance = record { amount = 1234 }
+                     ; chainId = record { rep = 4711 }
+                     ; active-contracts = [ (contract-address , contract-type) ]
+                     ; level = 106371
+                     ; now = record { instant = + 84600 }
+                     ; myty = contract-type
+                     ; self = record { rep = contract-address }
+                     ; self-address = contract-address
+                     ; sender = contract-sender
+                     ; source = contract-sender
+                     ; total-voting-power = 128000
+                     ; voting-power = λ x → 128
+                     }
 
-data ⊢GT : Typing where
-  ⊢GT₁ : ⊢GT [ int ] [ bool ]
+  contract-state-consistent : CS-consistent contract-state
+  contract-state-consistent = refl
 
-data ⊢LE : Typing where
-  ⊢LE₁ : ⊢LE [ int ] [ bool ]
+-- global block chain stuff
 
-data ⊢LT : Typing where
-  ⊢LT₁ : ⊢LT [ int ] [ bool ]
+record ContractState : Set where
+  field
+    balance : Mutez
+    param-ty store-ty : Type
+    {valid-store-ty} : Storable store-ty
+    store : T⟦ store-ty ⟧
+    instructions : List Instruction
 
--}
+record BlockchainState : Set where
+  field
+    contracts : List (Address × ContractState)
+    delegates : Address → Maybe KeyHash
+
+chain : {A B : Set} → ((x y : A) → Dec (x ≡ y)) → A → Maybe B → (A → Maybe B) → (A → Maybe B)
+chain _≟_ a mb f x
+  with x ≟ a
+... | yes refl = mb
+... | no  x≢a  = f a
+
+variable
+  bcs : BlockchainState
+  ops : List Operation
+
+getContractFromChain : BlockchainState → Address → (ty : Type) → Maybe ContractState
+getContractFromChain bcs addr ty = lookup (BlockchainState.contracts bcs)
+  where
+    lookup : List (Address × ContractState) → Maybe ContractState
+    lookup [] = nothing
+    lookup ((my-addr , my-contract-state) ∷ active)
+      with my-addr ≟A addr
+    ... | yes refl = just my-contract-state
+    ... | no addr≢ = lookup active
+
+-- this may be better as a function
+-- toplevel : Gas → List Operation → BlockchainState → Maybe BlockchainState
+
+data _||_↝_ : List Operation → BlockchainState → BlockchainState → Set where
+  [] : [] || bcs ↝ bcs
+  ⊨CREATE-CONTRACT : ∀ {pty sty}
+    → (CREATE-CONTRACT a pty sty inss ∷ ops) || bcs ↝ {!!}
+  ⊨TRANSFER-TOKENS : ∀ {passable-ty : Passable ty}{v}{cty}{cstate}
+    → getContractFromChain bcs (Contract.rep cty) ty ≡ just cstate
+    → Mutez.amount m ≤ Mutez.amount (ContractState.balance cstate)
+    → (TRANSFER-TOKENS ty passable-ty v m cty ∷ ops) || bcs ↝ record { contracts = {!!}
+                                                                     ; delegates = BlockchainState.delegates bcs } 
+  ⊨SET-DELEGATE : ∀ {mkh}
+    → (SET-DELEGATE a mkh ∷ ops) || bcs ↝ record { contracts = BlockchainState.contracts bcs
+                                                 ; delegates = chain _≟A_ a mkh (BlockchainState.delegates bcs) }
