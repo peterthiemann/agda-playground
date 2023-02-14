@@ -8,7 +8,12 @@ open import Data.Sum using (_⊎_; inj₁; inj₂)
 
 open import Data.Unit using (⊤; tt)
 
-open import Function.Base using (case_of_)
+-- stdlib 2.0!
+open import Effect.Monad.State using (State; RawMonadState)
+open RawMonadState
+
+
+open import Function.Base using (case_of_; _∘_; const)
 
 open import IO
 
@@ -37,10 +42,28 @@ variable
   t : Type
   s s₁ s₂ : Session
 
+
 T⟦_⟧ : Type → Set
 T⟦ nat ⟧ = ℕ
 
-data Commands (A : Set) : Session → Set₁ where
+module composable-command where
+  infixr 30 _⨟_
+
+  data Fragment (A : Set) : (Session → Session) → Set where
+    SEND : (A → T⟦ t ⟧ × A) → Fragment A (send t)
+    RECV : (T⟦ t ⟧ → A → A) → Fragment A (recv t)
+    _⨟_  : ∀ {f g} → Fragment A f → Fragment A g → Fragment A (f ∘ g)
+
+  data Command A : Session → Set where
+    CLOSE : ∀ {f} → Fragment A f → Command A (f end)
+
+  addp-command : Command ℕ binaryp
+  addp-command = CLOSE (RECV _+_ ⨟ RECV _+_ ⨟ SEND (λ x → x , 0))
+
+  -- works, but not there is no help from the type checker when defining the command
+
+
+data Commands (A : Set) : Session → Set where
   END    : Commands A end
   SEND   : (A → T⟦ t ⟧ × A) → Commands A s → Commands A (send t s)
   RECV   : (T⟦ t ⟧ → A → A) → Commands A s → Commands A (recv t s)
@@ -52,8 +75,8 @@ record Accepting A s : Set₁ where
   field pgm : Commands A s
 
 addp-command : Commands ℕ binaryp
-addp-command = RECV (λ x z → x + z)
-               (RECV (λ x z → x + z)
+addp-command = RECV const
+               (RECV _+_
                (SEND (λ x → x , 0)
                END))
 
@@ -67,7 +90,7 @@ postulate
 executor : {s : Session} → Commands A s → (init : A) → Channel → IO A
 executor END state ch = do
   primClose ch
-  return state
+  pure state
 executor (SEND getx cmd) state ch = do
   let (x , state′) = getx state
   primSend x ch
@@ -121,7 +144,7 @@ data Commands′ (A : Set) : Set → Session → Set₁ where
 executor′ : {s : Session} → Commands′ A A″ s → (init : A) → Channel → IO A″
 executor′ END state ch = do
   primClose ch
-  return state
+  pure state
 executor′ (SEND getx cmd) state ch = do
   let (x , state′) = getx state
   primSend x ch
@@ -149,7 +172,7 @@ executor′ (CHOICE1 putx cmd₁ cmd₂) state ch = do
 executor′ (SELECT2 getx cmd₁ cmd₂) state ch = do
   let bst = getx state
   primSend (proj₁ bst) ch
-  (false , state₁) ← return bst
+  (false , state₁) ← pure bst
     where
       (true , state₂) → executor′ cmd₂ state₂ ch
   executor′ cmd₁ state₁ ch
