@@ -77,7 +77,22 @@ T⟦ nat ⟧ = ℕ
 T⟦ bool ⟧ = Bool
 T⟦ int ⟧ = ℤ
 
+
 M₀ = ReaderT Channel IO
+
+module localize-state where
+  data Command (A : Set) : Session → Set₁ where
+    END    : Command A end
+    SEND   : State A T⟦ t ⟧       → Command A s → Command A (send t s)
+    RECV   : (T⟦ t ⟧ → State A ⊤) → Command A s → Command A (recv t s)
+
+  liftST : ∀ {A}{X} → {{RawMonad M}} → State A X → StateT A M X
+  liftST stax = get >>= λ a → let ( a′ , x ) = runState stax a in modify (const a′) >> pure x
+
+  exec : {s : Session} → Command A s → StateT A (ReaderT Channel IO) ⊤
+  exec END = ask >>= liftIO ∘ primClose
+  exec (SEND getx cmd) = liftST getx >>= λ x → ask >>= liftIO ∘ primSend x >> exec cmd
+  exec (RECV putx cmd) = ask >>= liftIO ∘ primRecv >>= liftST ∘ putx >> exec cmd
 
 data Command (A : Set) : Session → Set₁ where
   END    : Command A end
