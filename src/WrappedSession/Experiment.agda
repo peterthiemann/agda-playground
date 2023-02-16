@@ -1,7 +1,7 @@
 {-# OPTIONS --guardedness #-} {- required for IO -}
 module WrappedSession.Experiment where
 
-open import Data.Bool using (Bool; true; false)
+open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; _+_)
 open import Data.Product using (_×_; _,_; Σ; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
@@ -43,6 +43,14 @@ variable
   s s₁ s₂ : Session
 
 
+postulate
+  Channel : Set
+  primAccept : IO Channel
+  primClose : Channel → IO ⊤
+  primSend : A → Channel → IO ⊤
+  primRecv : Channel → IO A
+
+
 T⟦_⟧ : Type → Set
 T⟦ nat ⟧ = ℕ
 
@@ -62,6 +70,19 @@ module composable-command where
 
   -- works, but not there is no help from the type checker when defining the command
 
+module alternative-branching where
+  data Commands (A : Set) : Session → Set where
+    SELECT : (A → Bool × A) → ((b : Bool) → Commands A (if b then s₁ else s₂)) → Commands A (select s₁ s₂)
+    CHOICE : ((b : Bool) → A → (Commands A (if b then s₁ else s₂)) × A) → Commands A (choice s₁ s₂)
+
+  exec : {s : Session} → Commands A s → A → Channel → IO A
+  exec (SELECT getx cont) st ch = do
+    let (x , st′) = getx st
+    exec (cont x) st′ ch
+  exec (CHOICE cont) st ch = do
+    x ← primRecv{Bool} ch
+    let (cmdx , st′) = cont x st
+    exec cmdx st′ ch
 
 data Commands (A : Set) : Session → Set where
   END    : Commands A end
@@ -79,13 +100,6 @@ addp-command = RECV const
                (RECV _+_
                (SEND (λ x → x , 0)
                END))
-
-postulate
-  Channel : Set
-  primAccept : IO Channel
-  primClose : Channel → IO ⊤
-  primSend : A → Channel → IO ⊤
-  primRecv : Channel → IO A
 
 executor : {s : Session} → Commands A s → (init : A) → Channel → IO A
 executor END state ch = do
