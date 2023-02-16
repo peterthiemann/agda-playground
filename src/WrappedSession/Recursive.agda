@@ -17,6 +17,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_; refl; subst; sym
 open import IO
 
 variable
+  A A′ A″ A₁ A₂ : Set
   n : ℕ
 
 data Type : Set where
@@ -48,27 +49,26 @@ arithp = mu (choice (binaryp (var zero)) end)
 --     = choice (binaryp arithp) end
 
 variable
-  A A′ A″ A₁ A₂ : Set
   t : Type
   s s₁ s₂ : Session n
 
 T⟦_⟧ : Type → Set
 T⟦ nat ⟧ = ℕ
 
-data Commands {n} (A : Set) : Session n → Set₁ where
-  END    : Commands A end
-  SEND   : (A → T⟦ t ⟧ × A) → Commands A s → Commands A (send t s)
-  RECV   : (T⟦ t ⟧ → A → A) → Commands A s → Commands A (recv t s)
-  SELECT : (A → Bool × A) → Commands A s₁ → Commands A s₂ → Commands A (select s₁ s₂)
-  CHOICE : (Bool → A → A) → Commands A s₁ → Commands A s₂ → Commands A (choice s₁ s₂)
-  MU     : Commands A s → Commands A (mu s)
-  CONTINUE : (i : Fin n) → Commands A (var i)
+data Commands n (A : Set) : Session n → Set where
+  END    : Commands n A end
+  SEND   : (A → T⟦ t ⟧ × A) → Commands n A s → Commands n A (send t s)
+  RECV   : (T⟦ t ⟧ → A → A) → Commands n A s → Commands n A (recv t s)
+  SELECT : (A → Bool × A) → Commands n A s₁ → Commands n A s₂ → Commands n A (select s₁ s₂)
+  CHOICE : (Bool → A → A) → Commands n A s₁ → Commands n A s₂ → Commands n A (choice s₁ s₂)
+  MU     : Commands (suc n) A s → Commands n A (mu s)
+  CONTINUE : (i : Fin n) → Commands n A (var i)
 
--- record Accepting A s : Set₁ where
---   constructor ACC
---   field pgm : Commands A s
+record Accepting A s : Set where
+  constructor ACC
+  field pgm : Commands 0 A s
 
-arithp-command : Commands ℕ arithp
+arithp-command : Commands 0 ℕ arithp
 arithp-command = MU (CHOICE (λ b x → 0)
                             (RECV (λ _ x → x) (RECV _+_ (SEND (λ x → x , 0) (CONTINUE zero))))
                             END)
@@ -80,44 +80,53 @@ postulate
   primSend : A → Channel → IO ⊤
   primRecv : Channel → IO A
 
-CommandStore : ∀ n → Set → Set₁
-CommandStore n A = (i : Fin n) → ∃[ s ] (Commands {suc (toℕ (opposite i))} A s)
+CommandStore : ∀ n → Set → Set
+CommandStore n A = (i : Fin n) → ∃[ s ] (Commands (suc (toℕ (opposite i))) A s)
 
 -- cms : CommandStore
 -- cms A 0 = ( s : Session 1 , cmd)
 
-executor : Commands {n} A s → CommandStore n A → (init : A) → Channel → IO A
-executor END cms state ch = do
+Gas = ℕ
+
+executor : Gas → Commands n A s → CommandStore n A → (init : A) → Channel → IO A
+executor k END cms state ch = do
   primClose ch
-  return state
-executor (SEND getx cmd) cms state ch = do
+  pure state
+executor k (SEND getx cmd) cms state ch = do
   let (x , state′) = getx state
   primSend x ch
-  executor cmd cms state′ ch
-executor (RECV putx cmd) cms state ch = do
+  executor k cmd cms state′ ch
+executor k (RECV putx cmd) cms state ch = do
   x ← primRecv ch
   let state′ = putx x state
-  executor cmd cms state′ ch
-executor (SELECT getx cmd₁ cmd₂) cms state ch = do
+  executor k cmd cms state′ ch
+executor k (SELECT getx cmd₁ cmd₂) cms state ch = do
   let (x , state′) = getx state
   primSend x ch
-  (case x of (λ{ false → executor cmd₁ cms state′ ch ; true → executor cmd₂ cms state′ ch}))
-executor (CHOICE putx cmd₁ cmd₂) cms state ch = do
+  (case x of (λ{ false → executor k cmd₁ cms state′ ch ; true → executor k cmd₂ cms state′ ch}))
+executor k (CHOICE putx cmd₁ cmd₂) cms state ch = do
   x ← primRecv ch
   let state′ = putx x state
-  (case x of (λ{ false → executor cmd₁ cms state′ ch ; true → executor cmd₂ cms state′ ch}))
-executor {n} {A} {s = mu s} (MU cmd) cms state ch = executor cmd cms′ state ch
+  (case x of (λ{ false → executor k cmd₁ cms state′ ch ; true → executor k cmd₂ cms state′ ch}))
+executor {n} {A} {s = mu s} k (MU cmd) cms state ch = executor k cmd cms′ state ch
   where cms′ : CommandStore (suc n) A
         cms′ zero    rewrite toℕ-fromℕ n = s , cmd
         cms′ (suc i) rewrite toℕ-inject₁ (opposite i) = cms i
-executor {n} {A} (CONTINUE i) cms state ch
+executor {suc n} {A} zero (CONTINUE i) cms state ch = pure state -- hack alert!
+executor {suc n} {A} (suc k) (CONTINUE i) cms state ch
   with cms i
-... | s-i , cmd-i = executor cmd-i cms′ state ch
-  where cms′ : CommandStore (suc (toℕ (opposite i))) A
-        cms′ = {!!}
+... | s-i , cmd-i = executor k cmd-i (pop cms i) state ch
+  where
+    pop1 : ∀{n} → CommandStore (suc n) A → CommandStore n A
+    pop1 cms i with cms (suc i)
+    ... | cms₁ rewrite toℕ-inject₁ (opposite i) = cms₁
 
--- acceptor : Accepting A s → A → IO A
--- acceptor (ACC pgm) a = primAccept >>= executor pgm a
+    pop : ∀{n} → CommandStore (suc n) A → (i : Fin (suc n)) → CommandStore (suc (toℕ (opposite i))) A
+    pop {n} cms zero rewrite toℕ-fromℕ n = cms
+    pop {suc n} cms (suc i) = subst (λ H → CommandStore (suc H) A) (sym (toℕ-inject₁ (opposite i))) (pop (pop1 cms) i)
+
+acceptor : Gas → Accepting A s → A → IO A
+acceptor k (ACC pgm) a = primAccept >>= executor k pgm (λ()) a
 
 -- ----------------------------------------------------------------------
 -- -- a Σ type isomorphic to A₁ ⊎ A₂
