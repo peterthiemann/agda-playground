@@ -8,12 +8,12 @@ open import Data.Fin using (Fin; suc; zero; _≟_)
 open import Data.Fin.Subset using (Subset)
 open import Data.Product using (_×_; _,_; Σ; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
-open import Data.Vec using (Vec; [] ; _∷_; lookup)
+open import Data.Vec using (Vec; [] ; _∷_; lookup; updateAt)
 
 open import Data.Unit using (⊤; tt)
 open import Data.Empty using (⊥; ⊥-elim)
 
-open import Function.Base using (case_of_)
+open import Function.Base using (case_of_; const)
 
 open import Relation.Nullary
   using (¬_; Dec; yes; no)
@@ -76,16 +76,33 @@ data SingleSession : Set where
   trm : (d : Direction) → Type          → SingleSession → SingleSession
   end : SingleSession
 
+project : Fin n → Session n → SingleSession
+
 data Session where
   fork : Split m n → Session (suc m) → Session (suc n) → Session (m + n)
   -- assume new channel has address zero in both threads
-  brn : (d : Direction) → Fin n → Session n → Session n → Session n
+  brn : (d : Direction) → (i : Fin n) → (s₁ : Session n) → (s₂ : Session n)
+    → (∀ (j : Fin n) → i ≢ j → project j s₁ ≡ project j s₂)
+    → Session n
+  -- higher-order?
   trm : (d : Direction) → Fin n → (t : Type) → Session n → Session n
   end : Fin (suc n) → Session n → Session (suc n)
   terminate : Session zero
 
-pattern select x s₁ s₂ = brn OUT x s₁ s₂
-pattern choice x s₁ s₂ = brn INP x s₁ s₂
+  -- for higher-order...
+  -- clever-send : Fin n → (t : Type) → Session n → Session (nchannels t + n)
+  -- clever-recv : Fin n → (t : Type) → Session (nchannels t + n) → Session n
+
+data MultiSession : {n : ℕ} → Vec SingleSession n → Set where
+  brn : ∀ {ssn ssn₁ ssn₂ s₁ s₂} (d : Direction) (i : Fin n)
+    → lookup ssn i ≡ brn d s₁ s₂
+    → ssn₁ ≡ updateAt i (const s₁) ssn
+    → ssn₂ ≡ updateAt i (const s₂) ssn
+    → MultiSession ssn₁ → MultiSession ssn₂ → MultiSession ssn
+
+
+pattern select x s₁ s₂ p = brn OUT x s₁ s₂ p
+pattern choice x s₁ s₂ p = brn INP x s₁ s₂ p
 
 pattern recv x t s = trm INP x t s
 pattern send x t s = trm OUT x t s
@@ -121,12 +138,12 @@ dual end end = ⊤
 
 -- projection
 
-project : Fin n → Session n → SingleSession
+-- project : Fin n → Session n → SingleSession
 project f (fork sp-c s₁ s₂)
   with locate-split sp-c f
 ... | inj₁ x = project (suc x) s₁
 ... | inj₂ y = project (suc y) s₂
-project f (brn d x s₁ s₂)
+project f (brn d x s₁ s₂ _)
   with f ≟ x
 ... | no ¬p = project f s₁      -- must be equal to project n s₂
 ... | yes refl = brn d (project f s₁) (project f s₂)
@@ -143,7 +160,7 @@ project {suc n} f (end x s)
 
 wft : Session n → Set
 wft (fork sp-c s₁ s₂) = wft s₁ × wft s₂ × dual (project zero s₁) (project zero s₂)
-wft (brn d x s₁ s₂)   = wft s₁ × wft s₂ × ∀ f → f ≢ x → project f s₁ ≡ project f s₂
+wft (brn d x s₁ s₂ _)   = wft s₁ × wft s₂
 wft (trm d x t s)    = wft s
 wft (end x s)        = wft s
 wft terminate        = ⊤
@@ -161,8 +178,8 @@ data Commands (A : Set) :  {n : ℕ} → Session n → Set₁ where
   END    : ∀ f → (A → A) → Commands A s → Commands A (end f s)
   SEND   : ∀ f → (A → T⟦ t ⟧ × A) → Commands A s → Commands A (send f t s)
   RECV   : ∀ f → (T⟦ t ⟧ → A → ⊤ × A) → Commands A s → Commands A (recv f t s)
-  SELECT : ∀ f → (A → Bool × A) → Commands A s₁ → Commands A s₂ → Commands A (select f s₁ s₂)
-  CHOICE : ∀ f → (Bool → A → ⊤ × A) → Commands A s₁ → Commands A s₂ → Commands A (choice f s₁ s₂)
+  SELECT : ∀ f → (A → Bool × A) → Commands A s₁ → Commands A s₂ → Commands A (select f s₁ s₂ _)
+  CHOICE : ∀ f → (Bool → A → ⊤ × A) → Commands A s₁ → Commands A s₂ → Commands A (choice f s₁ s₂ _)
 
 postulate
   Channel : Set
@@ -174,7 +191,7 @@ postulate
 
 executor : {s : Session n} → Commands A s → (init : A)
   → Vec Channel (suc n) → IO (A × Vec Channel (suc n))
-executor (END f gend s) state chns = return (gend state , chns)
+executor (END f gend s) state chns = pure (gend state , chns)
 executor (SEND f getx cmds) state chns =
   let (x , state′) = getx state in
   primSend (lookup chns (suc f)) x >> executor cmds state′ chns

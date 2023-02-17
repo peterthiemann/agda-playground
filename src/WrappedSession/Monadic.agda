@@ -94,6 +94,36 @@ module localize-state where
   exec (SEND getx cmd) = liftST getx >>= λ x → ask >>= liftIO ∘ primSend x >> exec cmd
   exec (RECV putx cmd) = ask >>= liftIO ∘ primRecv >>= liftST ∘ putx >> exec cmd
 
+module relativize-state where
+  data Command {M : Set → Set₁} (A : Set) : Session → Set₁ where
+    END    : Command A end
+    SEND   : {{RawMonad M}} → StateT A M T⟦ t ⟧       → Command{M} A s → Command A (send t s)
+    RECV   : {{RawMonad M}} → (T⟦ t ⟧ → StateT A M ⊤) → Command{M} A s → Command A (recv t s)
+
+  negp-server : Command{M₀} ℤ unaryp
+  negp-server = {!!}
+
+  exec : {s : Session} → Command{M₀} A s → StateT A (ReaderT Channel IO) ⊤
+  exec END = ask >>= liftIO ∘ primClose
+  exec (SEND getx cmd) = getx >>= λ x → ask >>= liftIO ∘ primSend x >> exec cmd
+  exec (RECV putx cmd) = ask >>= liftIO ∘ primRecv >>= putx >> exec cmd
+
+module relativize-state-ranked where
+  data Command (A : Set) : Session → Set₂ where
+    END    : Command A end
+    SEND   : (∀ {M : Set → Set₁} → {{RawMonad M}} → StateT A M T⟦ t ⟧)       → Command A s → Command A (send t s)
+    RECV   : (∀ {M : Set → Set₁} → {{RawMonad M}} → (T⟦ t ⟧ → StateT A M ⊤)) → Command A s → Command A (recv t s)
+
+  negp-server : Command ℤ unaryp
+  negp-server = RECV put (SEND {!!} END)
+
+  exec : {s : Session} → Command A s → StateT A (ReaderT Channel IO) ⊤
+  exec END = ask >>= liftIO ∘ primClose
+  exec (SEND getx cmd) = getx >>= λ x → ask >>= liftIO ∘ primSend x >> exec cmd
+  exec (RECV putx cmd) = ask >>= liftIO ∘ primRecv >>= putx >> exec cmd
+
+
+
 data Command (A : Set) : Session → Set₁ where
   END    : Command A end
   SEND   : StateT A M₀ T⟦ t ⟧       → Command A s → Command A (send t s)
@@ -111,6 +141,13 @@ record Accepting A s : Set₁ where
 addp-command : Command ℤ binaryp
 addp-command = RECV put $ RECV (modify ∘′ _+_) $ SEND get $ END
 
+addp-command′ : Command ℤ binaryp
+addp-command′ = RECV put $ RECV adds $ SEND get $ END
+  where
+    adds : ℤ → StateT ℤ M₀ ⊤
+    adds x = do
+      modify λ a → a + x
+
 negp-command : Command ℤ unaryp
 negp-command = RECV (put ∘ -_) $ SEND get END
 
@@ -127,5 +164,6 @@ exec (CHOICE putx cmd cmd₁) = ask >>= liftIO ∘ primRecv >>= λ b → putx b 
 acceptor : Accepting A s → A → IO A
 acceptor (ACC pgm) a = do
   ch ← primAccept
+  -- x ← runReaderT (execStateT {!!} (exec pgm) a) ch
   final , _ ← runReaderT (runStateT (exec pgm) a) ch
   pure final

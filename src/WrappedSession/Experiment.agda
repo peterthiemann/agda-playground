@@ -13,14 +13,17 @@ open import Effect.Monad.State using (State; RawMonadState)
 open RawMonadState
 
 
-open import Function.Base using (case_of_; _∘_; const)
+open import Function.Base using (case_of_; _∘_; const; id)
 
 open import IO
 
+
+data Session : Set
 data Type : Set where
   nat : Type
+  chan : Session → Type
 
-data Session : Set where
+data Session where
   select choice : Session → Session → Session
   send recv : Type → Session → Session
   end : Session
@@ -50,9 +53,9 @@ postulate
   primSend : A → Channel → IO ⊤
   primRecv : Channel → IO A
 
-
 T⟦_⟧ : Type → Set
 T⟦ nat ⟧ = ℕ
+T⟦ chan s ⟧ = Channel
 
 module composable-command where
   infixr 30 _⨟_
@@ -70,6 +73,40 @@ module composable-command where
 
   -- works, but not there is no help from the type checker when defining the command
 
+  data Comp (A B : Set) : Set₁ where
+    inject : (f : A → B) → Comp A B
+    comp   : ∀ {C : Set} → (f : Comp C B) (g : Comp A C) → Comp A B
+
+  compile : ∀{A B} → Comp A B → A → B
+  compile (inject f) = f
+  compile (comp f g) = compile f ∘ compile g
+
+  data Frag1 (A : Set) : (Comp Session Session) → Set where
+    SEND : (A → T⟦ t ⟧ × A) → Frag1 A (inject (send t))
+    RECV : (T⟦ t ⟧ → A → A) → Frag1 A (inject (recv t))
+    _⨟_  : ∀ {f g} → Frag1 A f → Frag1 A g → Frag1 A (comp f g)
+  
+  data Cmd1 A : Comp Session Session → Set₁ where
+    CLOSE : ∀ {f} → Frag1 A f → Cmd1 A f
+
+  tocomp : Session → Comp Session Session
+  tocomp (send x s) = comp (inject (send x)) (tocomp s)
+  tocomp (recv x s) = comp (inject (recv x)) (tocomp s)
+  tocomp end = inject id
+  tocomp (select s s₁) = {!!}
+  tocomp (choice s s₁) = {!!}
+  
+  addp-cmd1 : Cmd1 ℕ (tocomp binaryp)
+  addp-cmd1 = CLOSE ((RECV _+_) ⨟ ((RECV _+_) ⨟ ((SEND (λ x → x , 0)) ⨟ {!!})))
+
+
+
+
+
+
+
+
+
 module alternative-branching where
   data Commands (A : Set) : Session → Set where
     SELECT : (A → Bool × A) → ((b : Bool) → Commands A (if b then s₁ else s₂)) → Commands A (select s₁ s₂)
@@ -83,6 +120,10 @@ module alternative-branching where
     x ← primRecv{Bool} ch
     let (cmdx , st′) = cont x st
     exec cmdx st′ ch
+
+
+
+
 
 data Commands (A : Set) : Session → Set where
   END    : Commands A end
