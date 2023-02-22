@@ -41,7 +41,7 @@ arithp : Session
 arithp = choice binaryp unaryp
 
 variable
-  A A′ A″ A₁ A₂ : Set
+  A B A′ A″ A₁ A₂ : Set
   t : Type
   s s₁ s₂ : Session
 
@@ -104,6 +104,16 @@ module composable-command where
 
 
 
+module even-more-alternative-branching where
+  data Cmd (A B : Set) : Session → Set₁ where
+    SELECT : ∀ {F} → (A → Σ Bool F)
+      → ((p : Σ Bool F) → Cmd (F (proj₁ p)) B (if proj₁ p then s₁ else s₂))
+      → Cmd A B (select s₁ s₂)
+  
+  exec : {s : Session} → Cmd A B s → A → Channel → IO B
+  exec (SELECT getx cont) a ch = do
+    let p = getx a
+    exec (cont p) (proj₂ p) ch
 
 
 
@@ -132,7 +142,7 @@ data Commands (A : Set) : Session → Set where
   SELECT : (A → Bool × A) → Commands A s₁ → Commands A s₂ → Commands A (select s₁ s₂)
   CHOICE : (Bool → A → ⊤ × A) → Commands A s₁ → Commands A s₂ → Commands A (choice s₁ s₂)
 
-record Accepting A s : Set₁ where
+record Accepting A s : Set where
   constructor ACC
   field pgm : Commands A s
 
