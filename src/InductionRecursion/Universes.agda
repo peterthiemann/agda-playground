@@ -165,38 +165,46 @@ mutual
 EMPTY : Fam Set
 EMPTY = Zero , (λ{()})
 
-LEVEL : ℕ → Fam Set
-LEVEL zero = NU EMPTY , ⟦_⟧NU
-LEVEL (suc n) = NU (LEVEL n) , ⟦_⟧NU
+-- -- this definition does not reduce to a pair as long as the level is unknown
+-- LEVEL : ℕ → Fam Set
+-- LEVEL zero = NU EMPTY , ⟦_⟧NU
+-- LEVEL (suc n) = NU (LEVEL n) , ⟦_⟧NU
 
-LEVEL′ : ℕ → Fam Set
-LEVEL′ l = NU (go l) , ⟦_⟧NU
-  where go : ℕ → Fam Set
-        go zero = EMPTY
-        go (suc n) = LEVEL′ n
+LEVEL go : ℕ → Fam Set
 
-n0 : proj₁ (LEVEL 0)
+LEVEL l = NU (go l) , ⟦_⟧NU
+
+go zero = EMPTY
+go (suc n) = LEVEL n
+
+CODE : ℕ → Set
+CODE l = proj₁ (LEVEL l)
+
+-- five different names for ℕ → ℕ
+
+n0 : CODE 0
 n0 = Π′ Nat′ (λ x → Nat′)
 
-n1 : proj₁ (LEVEL 1)
+n1 : CODE 1
 n1 = Π′ Nat′ (λ _ → Nat′)
 
-n2 : proj₁ (LEVEL 1)
+n2 : CODE 1
 n2 = El′ n0
 
-n3 : proj₁ (LEVEL 1)
+n3 : CODE 1
 n3 = Π′ (El′ Nat′) (λ _ → El′ Nat′)
 
-n4 : proj₁ (LEVEL 2)
+n4 : CODE 2
 n4 = El′ n2
 
-n5 : proj₁ (LEVEL 0)
+n5 : CODE 0
 n5 = Π′ U′ λ{()}
 
-n6 : proj₁ (LEVEL 1)
+n6 : CODE 1
 n6 = Π′ U′ λ x → U′
 
 module stratified-in-NU where
+  -- denotational semantics of stratified system F in NU
 
   -- open import Level
   open import Data.List using (List; []; _∷_)
@@ -229,9 +237,9 @@ module stratified-in-NU where
   --! Type
   data Type Δ : Level → Set where
     `ℕ      : Type Δ zero
-    _⇒_     : Type Δ l₁ → Type Δ l₂ → Type Δ (l₁ ⊔ l₂)
-    `_      : l ∈ Δ → Type Δ l
-    `∀α_,_  : ∀ l → Type (l ∷ Δ) l′ → Type Δ (suc l ⊔ l′)
+    _⇒_     : (T₁ : Type Δ l₁) (T₂ : Type Δ l₂) → Type Δ (l₁ ⊔ l₂)
+    `_      : (α : l ∈ Δ) → Type Δ l
+    `∀α_,_  : (l : Level) (T : Type (l ∷ Δ) l′) → Type Δ (suc l ⊔ l′)
 
   -- property of Nat._⊔_
   lub-to-diff : l ≡ l₁ ⊔ l₂ → ∃[ n₁ ] ∃[ n₂ ] n₁ +ℕ l₁ ≡ l × n₂ +ℕ l₂ ≡ l
@@ -242,22 +250,22 @@ module stratified-in-NU where
   ... | n₁ , n₂ , eq₁ , eq₂
     = n₁ , n₂ , trans (+-suc n₁ l₁) (cong suc eq₁) , trans (+-suc n₂ l₂) (cong suc eq₂)
 
-  lifter : ∀ {n} → proj₁ (LEVEL′ l) → proj₁ (LEVEL′ (n +ℕ l))
+  lifter : ∀ {n} → CODE l → CODE (n +ℕ l)
   lifter {n = zero} v = v
   lifter {n = suc n} v = El′ (lifter v)
 
-  encode : Type Δ l → proj₁ (LEVEL′ l)
+  encode : Type Δ l → CODE l
   encode `ℕ = Nat′
   encode (_⇒_ {l₁}{l₂} T₁ T₂)
     with lub-to-diff {l₁ = l₁}{l₂ = l₂} refl
   ... | n₂ , n₁ , eq₁ , eq₂
-    = Π′ (subst (proj₁ ∘ LEVEL′) eq₁ (lifter (encode T₁))) λ _ →
-          subst (proj₁ ∘ LEVEL′) eq₂ (lifter (encode T₂))
+    = Π′ (subst CODE eq₁ (lifter (encode T₁))) λ _ →
+          subst CODE eq₂ (lifter (encode T₂))
   encode (` x) = U′
   encode (`∀α_,_ {l′ = l′} l T₁)
     with lub-to-diff {l₁ = suc l}{l₂ = l′} refl
   ... | n₁ , n₂ , eq₁ , eq₂
-    = Π′ U′ (λ x → subst  (proj₁ ∘ LEVEL′) eq₂ (lifter (encode T₁)))
+    = Π′ U′ (λ x → subst CODE eq₂ (lifter (encode T₁)))
 
   variable T T′ T₁ T₂ : Type Δ l
 
@@ -265,13 +273,13 @@ module stratified-in-NU where
 
   --! TEnv
   Env* : LEnv → Set
-  Env* Δ = ∀ {l} → l ∈ Δ → proj₁ (LEVEL′ (Δ-level Δ))
+  Env* Δ = ∀ {l} → l ∈ Δ → CODE (Δ-level Δ)
 
   lookup : Env* Δ
   lookup here = U′
   lookup {Δ = l ∷ Δ} (there {l′ = l′} x)
     with lub-to-diff {l₁ = suc l′} {l₂ = Δ-level Δ} refl
-  ... | n₁ , n₂ , eq₁ , eq₂ = subst (proj₁ ∘ LEVEL′) eq₂ (lifter{n = n₂} (lookup x))
+  ... | n₁ , n₂ , eq₁ , eq₂ = subst CODE eq₂ (lifter (lookup x))
 
   variable
     η η₁ η₂ : Env* Δ  
