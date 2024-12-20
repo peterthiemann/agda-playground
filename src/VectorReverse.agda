@@ -6,10 +6,28 @@ open import Data.Nat.Properties using (+-identityʳ; +-suc)
 open import Relation.Binary.PropositionalEquality
   using (_≡_; _≢_; refl; sym; trans; cong; cong₂; subst; resp₂)
 
+module contradictory where
+  bad : Set
+  bad = zero ≡ suc zero
+
+  postulate
+    contra : zero ≡ suc zero
+
+  crush : ∀ n → zero ≡ n
+  crush zero = refl
+  crush (suc n) rewrite sym (crush n) = contra
 
 variable
   A : Set
   n m : ℕ
+
+data Vec′ (A : Set) : ℕ → Set where
+  []  : Vec′ A zero
+  _∷_ : ∀ {n} → A → Vec′ A n → Vec′ A (suc n)
+
+append : ∀ {A m n} → Vec′ A m → Vec′ A n → Vec′ A (m + n)
+append [] W = W
+append {A}{suc m}{n} (x ∷ V) W = x ∷ append V W
 
 module standard-does-not-work-well where
 
