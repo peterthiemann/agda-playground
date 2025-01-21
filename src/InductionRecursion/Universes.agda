@@ -159,8 +159,8 @@ mutual
   ⟦_⟧NU {U , El } U′ = U
   ⟦_⟧NU {U , El }(El′ T ) = El T
   ⟦ Nat′ ⟧NU = ℕ
-  ⟦ Π′ S T ⟧NU = (s : ⟦ S ⟧NU) → ⟦ T s ⟧NU
-  ⟦ Σ′ S T ⟧NU = Σ (⟦ S ⟧NU) λ s → ⟦ T s ⟧NU
+  ⟦ Π′ S T ⟧NU = ∀ s →  ⟦ T s ⟧NU
+  ⟦ Σ′ S T ⟧NU = ∃[ s ] ⟦ T s ⟧NU
 
 EMPTY : Fam Set
 EMPTY = Zero , (λ{()})
@@ -250,9 +250,34 @@ module stratified-in-NU where
   ... | n₁ , n₂ , eq₁ , eq₂
     = n₁ , n₂ , trans (+-suc n₁ l₁) (cong suc eq₁) , trans (+-suc n₂ l₂) (cong suc eq₂)
 
+  simple-lifter : ∀ {n} → CODE l → CODE (n +ℕ l)
+  simple-lifter {n = zero} S = S
+  simple-lifter {n = suc n} S = El′ (simple-lifter S)
+
   lifter : ∀ {n} → CODE l → CODE (n +ℕ l)
+  dropper : ∀ {n} → CODE (n +ℕ l) → CODE l
+  lifter∘dropper≡id : ∀ {n}{S : CODE (n +ℕ l)} → lifter {n = n} (dropper {n = n} S) ≡ S
+
   lifter {n = zero} v = v
-  lifter {n = suc n} v = El′ (lifter v)
+  lifter {n = suc n} U′ = U′
+  lifter {n = suc n} (El′ S) = El′ (lifter (El′ S))
+  lifter {n = suc n} Nat′ = Nat′
+  lifter {n = suc n} (Π′ S T) = El′ (Π′ (lifter S) (λ s → lifter (T {!!})))
+  lifter {n = suc n} (Σ′ S T) = El′ (Σ′ (lifter S) {!!})
+
+  dropper {n = zero} S = S
+  dropper {n = suc n} U′ = U′
+  dropper {n = suc n} (El′ x) = dropper x
+  dropper {n = suc n} Nat′ = Nat′
+  dropper {n = suc n} (Π′ S T) = Π′ (dropper S) (λ s → dropper (T {!!}))
+  dropper {n = suc n} (Σ′ S T) = Σ′ (dropper S) (λ s → dropper (T {!!}))
+
+  lifter∘dropper≡id {n = zero} {S = S} = refl
+  lifter∘dropper≡id {n = suc n} {S = U′} = refl
+  lifter∘dropper≡id {n = suc n} {S = El′ x} = {!!}
+  lifter∘dropper≡id {n = suc n} {S = Nat′} = refl
+  lifter∘dropper≡id {n = suc n} {S = Π′ S T} = {!!}
+  lifter∘dropper≡id {n = suc n} {S = Σ′ S T} = {!!}
 
   encode : Type Δ l → CODE l
   encode `ℕ = Nat′
