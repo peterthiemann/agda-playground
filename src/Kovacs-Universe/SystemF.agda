@@ -182,7 +182,12 @@ E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
   let f = E⟦ M ⟧ η γ ; a = E⟦ N ⟧ η γ in
   coe (ElLift≤ (⊔₂ l l′) (encode T′ η)) (f (coe (sym (ElLift≤ (⊔₁ l l′) (encode T η))) a))
 -- E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
-E⟦ Λ l ⇒ M ⟧ η γ = λ α →
-  let r = E⟦ M ⟧ (subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η) (extend-tskip γ) in {!r!}
+E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →
+  let η′ = subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η in
+  let r = E⟦ M ⟧ η′ (extend-tskip γ) in
+  coe (sym (ElLift≤ (⊔₂ (ℕ.suc l) l′) (encode T η′))) r
 -- E⟦ M ⟧ (α ∷ η) (extend-tskip γ)
-E⟦ M ∙ T′ ⟧ η γ = let F = E⟦ M ⟧ η γ ; u′ = encode T′ η in {!F ? !}
+E⟦ _∙_ {l = l} M T′ ⟧ η γ =
+  let F = E⟦ M ⟧ η γ ; u′ = encode T′ η in
+  let r = F (coe (cong Uⁱʳ (ext (λ j → ext (λ p → {!!})))) u′) in
+  {! !}
