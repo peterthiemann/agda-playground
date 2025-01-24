@@ -1,10 +1,12 @@
 module SystemF where
 
-open import Data.Nat using ( ℕ; s≤s; z≤n ) renaming (_⊔_ to _⊔ℕ_; _+_ to _+ℕ_; _<_ to _<ℕ_ )
-open import Data.Nat.Properties using (+-identityʳ; +-suc; <-trans)
+open import Level using (zero)
+open import Data.Nat using ( ℕ; s≤s; z≤n; _<′_ ) renaming (_⊔_ to _⊔ℕ_; _+_ to _+ℕ_; _<_ to _<ℕ_ )
+open import Data.Nat.Properties using (+-identityʳ; +-suc; <-trans; <⇒<′)
 open import Data.List using (List; []; _∷_)
 open import Data.List.Membership.Propositional
 open import Data.List.Relation.Unary.All using (All; []; _∷_; lookup; lookupAny)
+open import Function  using (id)
 
 open import Lib
 import IRUniverse as IR
@@ -103,17 +105,21 @@ encode (_`⇒_ {l₁ = l₁} {l₂ = l₂} T₁ T₂) η = (Lift≤ (⊔₁ l₁
 encode (` α) η = lookup η α
 encode (`∀α_,_ {l′ = l′} l T) η =
   Π' (U' {j = l} (<≤-trans IR.ℕ-example.<suc (⊔₁ (ℕ.suc l) l′)))
-     λ u → Lift≤ (⊔₂ (ℕ.suc l) l′) (encode T (subst Uⁱʳ (ext (λ j → ext (λ p → {!U<-compute {j = j} {p = p}!}))) u ∷ η))
-
+     λ u → Lift≤ (⊔₂ (ℕ.suc l) l′)
+         (encode T (subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η))
+--         (encode T (coe {!U<-compute!} u ∷ η))
 
 Env* : LEnv → Set
 Env* Δ = All U Δ
 
 ⟦_⟧ᵀ : (T : Type Δ l) → (η : All U Δ) → Set
-⟦ `ℕ ⟧ᵀ η = ℕ
-⟦ T₁ `⇒ T₂ ⟧ᵀ η = ⟦ T₁ ⟧ᵀ η → ⟦ T₂ ⟧ᵀ η
-⟦ ` α ⟧ᵀ η = El (lookup η α)
-⟦ `∀α l , T ⟧ᵀ η = (α : U l) → ⟦ T ⟧ᵀ (α ∷ η)
+⟦ T ⟧ᵀ η = El (encode T η)
+
+-- ⟦_⟧ᵀ : (T : Type Δ l) → (η : All U Δ) → Set
+-- ⟦ `ℕ ⟧ᵀ η = ℕ
+-- ⟦ T₁ `⇒ T₂ ⟧ᵀ η = ⟦ T₁ ⟧ᵀ η → ⟦ T₂ ⟧ᵀ η
+-- ⟦ ` α ⟧ᵀ η = El (lookup η α)
+-- ⟦ `∀α l , T ⟧ᵀ η = (α : U l) → ⟦ T ⟧ᵀ (α ∷ η)
 
 
 -- type environments
@@ -168,7 +174,15 @@ E⟦_⟧ : ∀ {T : Type Δ l}{Γ : Ctx Δ} → (e : Expr Γ T) → (η : Env* �
 E⟦ # n ⟧ η γ = n
 E⟦ `suc x ⟧ η γ = ℕ.suc (E⟦ x ⟧ η γ)
 E⟦ ` x ⟧ η γ = γ _ _ x
-E⟦ ƛ M ⟧ η γ = λ x → E⟦ M ⟧ η (extend γ x)
-E⟦ M · N ⟧ η γ = E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
-E⟦ Λ l ⇒ M ⟧ η γ = λ α → E⟦ M ⟧ (α ∷ η) (extend-tskip γ)
-E⟦ M ∙ T′ ⟧ η γ = let F = E⟦ M ⟧ η γ in {!F!}
+E⟦ ƛ_ {l = l}{l′ = l′}{T = T}{T′ = T′} M ⟧ η γ =
+  λ x → let r = E⟦ M ⟧ η (extend γ (coe (ElLift≤ {l}{l ⊔ l′} (⊔₁ l l′) (encode T η)) x)) in
+        coe (sym (ElLift≤ (⊔₂ l l′) (encode T′ η))) r
+-- λ x → E⟦ M ⟧ η (extend γ x)
+E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
+  let f = E⟦ M ⟧ η γ ; a = E⟦ N ⟧ η γ in
+  coe (ElLift≤ (⊔₂ l l′) (encode T′ η)) (f (coe (sym (ElLift≤ (⊔₁ l l′) (encode T η))) a))
+-- E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
+E⟦ Λ l ⇒ M ⟧ η γ = λ α →
+  let r = E⟦ M ⟧ (subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η) (extend-tskip γ) in {!r!}
+-- E⟦ M ⟧ (α ∷ η) (extend-tskip γ)
+E⟦ M ∙ T′ ⟧ η γ = let F = E⟦ M ⟧ η γ ; u′ = encode T′ η in {!F ? !}
