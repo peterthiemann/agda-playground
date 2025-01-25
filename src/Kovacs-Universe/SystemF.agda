@@ -187,7 +187,8 @@ E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →
   let r = E⟦ M ⟧ η′ (extend-tskip γ) in
   coe (sym (ElLift≤ (⊔₂ (ℕ.suc l) l′) (encode T η′))) r
 -- E⟦ M ⟧ (α ∷ η) (extend-tskip γ)
-E⟦ _∙_ {l = l} M T′ ⟧ η γ =
-  let F = E⟦ M ⟧ η γ ; u′ = encode T′ η in
-  let r = F (coe (cong Uⁱʳ (ext (λ j → ext (λ p → {!!})))) u′) in
-  {! !}
+E⟦ _∙_ {l = l} {l′ = l′}{T = T} M T′ ⟧ η γ =
+  let F = E⟦ M ⟧ η γ in
+  let u′ = encode T′ η in
+  let r = F (coe (cong Uⁱʳ (ext (λ j → ext (λ p → trans (U<-compute {l} {wf} {j} {p}) (sym U<-compute))))) u′) in
+  coe {!ElLift≤ (⊔₂ (ℕ.suc l) l′)!} r
