@@ -2,10 +2,14 @@ module Tagless where
 
 open import Level
 open import Data.Fin
-open import Data.Nat
+open import Data.Nat renaming (_⊔_ to _⊔ℕ_)
 open import Data.String
 open import Data.List
+open import Data.List.Membership.Propositional
+open import Data.List.Relation.Unary.Any
 open import Data.Vec
+open import Data.Unit using (⊤)
+open import Function using (id)
 
 open import Relation.Binary.PropositionalEquality
   using (_≡_; _≢_; refl; sym; trans; cong; cong₂; subst; resp₂)
@@ -20,51 +24,29 @@ lof : ℕ → Level
 lof ℕ.zero = Level.zero
 lof (ℕ.suc n) = Level.suc (lof n)
 
-module try1 where
 
-  -- polymorphic unit
-  data ⊤ {ℓ} : Set ℓ where
-    tt : ⊤
-
-  data Type n : Set where
-    `_ : Fin n → Type n
-    _⇒_ : Type n → Type n → Type n
-    `∀α,_ : Type (ℕ.suc n) → Type n
-    𝟙 : Type n
-
-  ⟦_⟧ : Type n → (l : ℕ) → Vec (Set (lof l)) n → Set (lof l)
-  ⟦ ` x ⟧ l η = Data.Vec.lookup η x
-  ⟦ T₁ ⇒ T₂ ⟧ l η = ⟦ T₁ ⟧ l η → ⟦ T₂ ⟧ l η
-  ⟦ `∀α, T ⟧ ℕ.zero η = {!!}
-  ⟦ `∀α, T ⟧ (ℕ.suc l) η = (α : Set (lof l)) → ⟦ T ⟧ (ℕ.suc l) ({!!} ∷ η)
-  ⟦ 𝟙 ⟧ l η = ⊤
-
-module try2 where
-
-  open import Data.Unit
+module version1 where
+  -- natural numbers as levels
+  Lvl = ℕ
 
   -- level environments
-  LEnv = List ℕ
+  LEnv = List Lvl
   variable Δ : LEnv
+  variable l l₁ l₂ l′ : Lvl
 
-  data _∈_ : ℕ → LEnv → Set where
-    here  : ∀ {l ls} → l ∈ (l ∷ ls)
-    there : ∀ {l l′ ls} → l ∈ ls → l ∈ (l′ ∷ ls)
+  data Type (Δ : LEnv) : Lvl → Set where
+    `_ : l ∈ Δ → Type Δ l
+    _`⇒_ : Type Δ l₁ → Type Δ l₂ → Type Δ (l₁ ⊔ℕ l₂)
+    `∀α_,_ : (lev : ℕ) → Type (lev ∷ Δ) l → Type Δ (ℕ.suc lev ⊔ℕ l)
+    𝟙 : Type Δ ℕ.zero
 
-  data Type (Δ : LEnv) : Set where
-    `_ : n ∈ Δ → Type Δ
-    _⇒_ : Type Δ → Type Δ → Type Δ
-    `∀α_,_ : (lev : ℕ) → Type (lev ∷ Δ) → Type Δ
-    𝟙 : Type Δ
+  postulate
+    -- standard renamings
+    weakenₜ : Type Δ l → Type (l′ ∷ Δ) l
+    -- standard single substitutions
+    sub0ₜ : (T : Type (l′ ∷ Δ) l) → (T′ : Type Δ l′) → Type Δ l
 
-  -- level of type according to Leivant'91
-  level : Type Δ → ℕ
-  level (`_ {lev} x) = lev
-  level (T₁ ⇒ T₂) = level T₁ Data.Nat.⊔ level T₂
-  level (`∀α q , T) = ℕ.suc q Data.Nat.⊔ level T
-  level 𝟙 = ℕ.zero
-
-  lof-⊔ : ∀ l₁ l₂ → lof (l₁ Data.Nat.⊔ l₂) ≡ lof l₁ Level.⊔ lof l₂
+  lof-⊔ : ∀ l₁ l₂ → lof (l₁ ⊔ℕ l₂) ≡ lof l₁ ⊔ lof l₂
   lof-⊔ ℕ.zero l₂ = refl
   lof-⊔ (ℕ.suc l₁) ℕ.zero = refl
   lof-⊔ (ℕ.suc l₁) (ℕ.suc l₂) = cong Level.suc (lof-⊔ l₁ l₂)
@@ -73,53 +55,73 @@ module try2 where
   Env* : LEnv → Setω
   Env* Δ = ∀ {l} → l ∈ Δ → Set (lof l)
 
+  ext* : Set (lof l) → Env* Δ → Env* (l ∷ Δ)
+  ext* s η (here refl) = s
+  ext* s η (there x) = η x
+
   -- the meaning of a stratified type in terms of Agda universes
-  ⟦_⟧ : (T : Type Δ) → Env* Δ → Set (lof (level T))
+  ⟦_⟧ : (T : Type Δ l) → Env* Δ → Set (lof l)
   ⟦ ` x ⟧ η = η x
-  ⟦ T₁ ⇒ T₂ ⟧ η with
-    (⟦ T₁ ⟧ η → ⟦ T₂ ⟧ η)
-  ... | S rewrite lof-⊔ (level T₁) (level T₂) = S
-  ⟦ `∀α lev , T ⟧ η with
-    ((α : Set (lof lev)) → ⟦ T ⟧ λ{ here → α ; (there x) → η x})
-  ... | S rewrite lof-⊔ (ℕ.suc lev) (level T) = S
+  ⟦  _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ η rewrite lof-⊔ l₁ l₂ = ⟦ T₁ ⟧ η → ⟦ T₂ ⟧ η
+  ⟦ `∀α_,_ {l = l} lev T ⟧ η rewrite lof-⊔ (ℕ.suc lev) l = (α : Set (lof lev)) → ⟦ T ⟧ (ext* α η)
   ⟦ 𝟙 ⟧ η = ⊤
+
+
+  postulate
+    -- interaction of weakening and env extension
+    weaken-ext : ∀ {lev} {T : Type Δ l} {α : Set (lof lev)} {η : Env* Δ} → ⟦ T ⟧ η ≡ ⟦ weakenₜ {l′ = lev} T ⟧ (ext* α η)
+    -- interaction of single substitution and env extension
+    sub-ext : ∀ {lev} {T : Type Δ lev} {T₁ : Type (lev ∷ Δ) l} {η : Env* Δ} → ⟦ T₁ ⟧ (ext* (⟦ T ⟧ η) η) ≡ ⟦ sub0ₜ T₁ T ⟧ η
+
 
   -- type environments
   data TEnv : LEnv → Set where
 
     ∅    : TEnv []
-    _◁*_ : (l : ℕ) → TEnv Δ → TEnv (l ∷ Δ)
-    _◁_  : Type Δ → TEnv Δ → TEnv Δ
+    _◁*_ : (l : Lvl) → TEnv Δ → TEnv (l ∷ Δ)
+    _◁_  : Type Δ l → TEnv Δ → TEnv Δ
   
-  data inn : ∀ {Δ} → Type Δ → TEnv Δ → Set where
-    here  : ∀ {T Γ} → inn {Δ} T (T ◁ Γ)
-    there : ∀ {T T′ Γ} → inn {Δ} T Γ → inn {Δ} T (T′ ◁ Γ)
-    tskip : ∀ {T l Γ} → inn {Δ} T Γ → inn {!!} (l ◁* Γ)
+  data inn : Type Δ l → TEnv Δ → Set where
+    here  : ∀ {T : Type Δ l} {Γ} → inn {Δ} T (T ◁ Γ)
+    there : ∀ {T : Type Δ l} {T′ : Type Δ l′} {Γ} → inn {Δ} T Γ → inn {Δ} T (T′ ◁ Γ)
+    tskip : ∀ {T : Type Δ l} {lev} {Γ} → inn {Δ} T Γ → inn (weakenₜ T) (lev ◁* Γ)
 
-  data Expr : (Δ : LEnv) → TEnv Δ → Type Δ → Set where
-    `_   : ∀ {T : Type Δ}{Γ : TEnv Δ} → inn T Γ → Expr Δ Γ T
-    ƛ_   : ∀ {T T′ : Type Δ}{Γ : TEnv Δ} → Expr Δ (T ◁ Γ) T′ → Expr Δ Γ (T ⇒ T′)
-    _·_  : ∀ {T T′ : Type Δ}{Γ : TEnv Δ} → Expr Δ Γ (T ⇒ T′) → Expr Δ Γ T → Expr Δ Γ T′
-    Λα_⇒_ : ∀ {Γ : TEnv Δ} → (l : ℕ) → {T : Type (l ∷ Δ)} → Expr (l ∷ Δ) (l ◁* Γ) T → Expr Δ Γ (`∀α l , T)
-    -- _∙_  : ∀ {l : ℕ}{T : Type (l ∷ Δ)}{Γ : TEnv Δ} → Expr Δ Γ (`∀α l , T) → (T′ : Type Δ) → Expr Δ Γ {!!}
+  data Expr {Δ : LEnv} (Γ : TEnv Δ) : Type Δ l → Set where
+    `_   : ∀ {T : Type Δ l} → inn T Γ → Expr Γ T
+    ƛ_   : ∀ {T : Type Δ l}{T′ : Type Δ l′} → Expr (T ◁ Γ) T′ → Expr Γ (T `⇒ T′)
+    _·_  : ∀ {T : Type Δ l}{T′ : Type Δ l′} → Expr Γ (T `⇒ T′) → Expr Γ T → Expr Γ T′
+    Λα_⇒_ : ∀ (lev : ℕ) → {T : Type (lev ∷ Δ) l} → Expr (lev ◁* Γ) T → Expr Γ (`∀α lev , T)
+    _∙_  : ∀ {lev : Lvl} {T : Type (lev ∷ Δ) l} → Expr Γ (`∀α lev , T) → (T′ : Type Δ lev) → Expr Γ (sub0ₜ T T′)
 
+  Env : {Δ : LEnv} → TEnv Δ → Env* Δ → Setω
+  Env {Δ} Γ η = ∀ {l}{T : Type Δ l} → (x : inn T Γ) → ⟦ T ⟧ η
 
-  Env : (Δ : LEnv) → TEnv Δ → Env* Δ → Setω
-  Env Δ Γ η = ∀ {T : Type Δ} → (x : inn T Γ) → ⟦ T ⟧ η
+  ext : {Γ : TEnv Δ} {T : Type Δ l} (η : Env* Δ) → ⟦ T ⟧ η → Env Γ η → Env (T ◁ Γ) η
+  ext η v γ here = v
+  ext η v γ (there x) = γ x
 
-  E⟦_⟧ : ∀ {T : Type Δ}{Γ : TEnv Δ} → Expr Δ Γ T → (η : Env* Δ) → Env Δ Γ η → ⟦ T ⟧ η
+  ext-t : {Γ : TEnv Δ} {lev : Lvl} {α : Set (lof lev)} → (η : Env* Δ) → Env Γ η → Env (lev ◁* Γ) (ext* α η)
+  ext-t η γ (tskip x) = subst id weaken-ext (γ x)
+
+  E⟦_⟧ : ∀ {T : Type Δ l}{Γ : TEnv Δ} → Expr Γ T → (η : Env* Δ) → Env Γ η → ⟦ T ⟧ η
   E⟦ ` x ⟧ η γ = γ x
-  E⟦ ƛ_ {T = T}{T′ = T′} e ⟧ η γ
-    with (⟦ T ⟧ η → ⟦ T′ ⟧ η) in eq
-  ... | S = {!!}
-  E⟦ e₁ · e₂ ⟧ η γ
-    with E⟦ e₁ ⟧ η γ | E⟦ e₂ ⟧ η γ
-  ... | v₁ | v₂ = {!!}
-  E⟦ Λα l ⇒ e ⟧ η γ = {!!}
+  E⟦ ƛ_ {l = l₁}{l′ = l₂}{T = T}{T′ = T′} e ⟧ η γ
+    rewrite lof-⊔ l₁ l₂ = λ v → E⟦ e ⟧ η (ext η v γ)
+  E⟦ _·_ {l = l₁}{l′ = l₂} e₁ e₂ ⟧ η γ
+    with E⟦ e₁ ⟧ η γ
+  ... | v₁
+    rewrite lof-⊔ l₁ l₂ = v₁ (E⟦ e₂ ⟧ η γ)
+  E⟦ Λα_⇒_ {l = l} lev e ⟧ η γ
+    rewrite lof-⊔ (ℕ.suc lev) l = λ (α : Set (lof lev)) → E⟦ e ⟧ (ext* α η) (ext-t η γ)
+  E⟦ _∙_ {l = l}{lev = lev} e T ⟧ η γ
+    with E⟦ e ⟧ η γ
+  ... | v rewrite lof-⊔ (ℕ.suc lev) l =
+    let r = v (⟦ T ⟧ η)
+    in subst id sub-ext r
+
 
 module attempt3 where
 
-  open import Data.Unit using (⊤)
   open import Data.Product using (_×_; _,_; Σ; proj₁; proj₂)
   open import Function using (id)
 
@@ -128,10 +130,6 @@ module attempt3 where
   variable
     Δ : LEnv
     ℓ  ℓ′ ℓ₁ ℓ₂ : Level
-
-  data _∈_ : Level → LEnv → Set where
-    here  : ∀ {l ls} → l ∈ (l ∷ ls)
-    there : ∀ {l l′ ls} → l ∈ ls → l ∈ (l′ ∷ ls)
 
   data Type (Δ : LEnv) : Level → Set where
     `_ : ℓ ∈ Δ → Type Δ ℓ
@@ -147,7 +145,7 @@ module attempt3 where
     Env* Δ = ∀ {l} → l ∈ Δ → Set l
 
     ext* : Set ℓ → Env* Δ → Env* (ℓ ∷ Δ)
-    ext* s η here = s
+    ext* s η (here refl) = s
     ext* s η (there x) = η x
 
     ⟦_⟧ : Type Δ ℓ → Env* Δ → Set ℓ
@@ -170,7 +168,7 @@ module attempt3 where
     ext* s η = s , η
 
     lookupₜ : ∀ {ℓ}{Δ} → Env* Δ → ℓ ∈ Δ → Set ℓ
-    lookupₜ (s , _) here = s
+    lookupₜ (s , _) (here refl) = s
     lookupₜ (_ , η) (there x) = lookupₜ η x
 
     ⟦_⟧ : (t : Type Δ ℓ) → (η : Env* Δ) → Set ℓ
