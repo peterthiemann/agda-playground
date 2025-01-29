@@ -85,14 +85,6 @@ data Type Δ : Lvl → Set where
   `_      : (α : l ∈ Δ) → Type Δ l
   `∀α_,_  : (l : Lvl) (T : Type (l ∷ Δ) l′) → Type Δ (ℕ.suc l ⊔ l′)
 
--- this encoding does not work
--- encode : Type Δ l → All (λ i → U i) Δ → U l
--- encode `ℕ η = ℕ'
--- encode (T₁ `⇒ T₂) η = Π'' (encode T₁ η) (λ _ → encode T₂ η)
--- encode (` α) η = lookup η α
--- encode {Δ = Δ} (`∀α i , T) η =
---   Π'' (U' {ℕ.suc i} IR.ℕ-example.<suc) λ α → encode {Δ = i ∷ Δ} T ({!!} ∷ η)
-
 top-level-of : Type Δ l → Lvl
 top-level-of `ℕ = 0
 top-level-of (T `⇒ T₁) = 0
@@ -106,13 +98,13 @@ encode (` α) η = lookup η α
 encode (`∀α_,_ {l′ = l′} l T) η =
   Π' (U' {j = l} (<≤-trans IR.ℕ-example.<suc (⊔₁ (ℕ.suc l) l′)))
      λ u → Lift≤ (⊔₂ (ℕ.suc l) l′)
-         (encode T (subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η))
---         (encode T (coe {!U<-compute!} u ∷ η))
+        (encode T (coe  (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η))
+--          (encode T (coe {!U<-compute!} u ∷ η))
 
 Env* : LEnv → Set
 Env* Δ = All U Δ
 
-⟦_⟧ᵀ : (T : Type Δ l) → (η : All U Δ) → Set
+⟦_⟧ᵀ : (T : Type Δ l) → (η : Env* Δ) → Set
 ⟦ T ⟧ᵀ η = El (encode T η)
 
 -- ⟦_⟧ᵀ : (T : Type Δ l) → (η : All U Δ) → Set
@@ -169,6 +161,8 @@ postulate
   extend-tskip : ∀ {Δ : LEnv} {Γ : Ctx Δ} {η : Env* Δ} {⟦α⟧ : U l} →
     Env Γ η → Env (l ◁* Γ) (⟦α⟧ ∷ η)
 
+  subst-env : ∀ (T : Type (l′ ∷ Δ) l) (T′ : Type Δ l′) (η : Env* Δ) → ⟦ T ⟧ᵀ (encode T′ η ∷ η) ≡ ⟦ T [ T′ ]T ⟧ᵀ η
+
 
 E⟦_⟧ : ∀ {T : Type Δ l}{Γ : Ctx Δ} → (e : Expr Γ T) → (η : Env* Δ) → (γ : Env Γ η) → ⟦ T ⟧ᵀ η
 E⟦ # n ⟧ η γ = n
@@ -183,12 +177,21 @@ E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
   coe (ElLift≤ (⊔₂ l l′) (encode T′ η)) (f (coe (sym (ElLift≤ (⊔₁ l l′) (encode T η))) a))
 -- E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
 E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →
-  let η′ = subst Uⁱʳ (ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η in
+  let η′ = coe (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η in
   let r = E⟦ M ⟧ η′ (extend-tskip γ) in
   coe (sym (ElLift≤ (⊔₂ (ℕ.suc l) l′) (encode T η′))) r
 -- E⟦ M ⟧ (α ∷ η) (extend-tskip γ)
 E⟦ _∙_ {l = l} {l′ = l′}{T = T} M T′ ⟧ η γ =
   let F = E⟦ M ⟧ η γ in
   let u′ = encode T′ η in
-  let r = F (coe (cong Uⁱʳ (ext (λ j → ext (λ p → trans (U<-compute {l} {wf} {j} {p}) (sym U<-compute))))) u′) in
-  coe {!ElLift≤ (⊔₂ (ℕ.suc l) l′)!} r
+  let r = F (coe (Uⁱʳ & (ext (λ j → ext (λ p → trans (U<-compute {l} {wf} {j} {p}) (sym U<-compute))))) u′) in
+  -- let eq1 = (Uⁱʳ & ext (λ j → ext (λ p → (λ acc₁ → U< j p) & Acc-prop _ {!!}))) in
+  -- let eq2 = (Uⁱʳ & ext (λ j → ext (λ p → (λ a → Uⁱʳ U<) & Acc-prop _ {!!} ◾ U<-compute ⁻¹))) in
+  let eq1 = Uⁱʳ & ext λ j → ext λ p → trans {!U<-compute{_}{_}{j}{p}!} {!!} in
+  let eq2 = Uⁱʳ & ext λ j → ext λ p → U<-compute {l} {wf} {j} {p} ◾ U<-compute ⁻¹ in
+  coe (trans (trans (ElLift≤ (⊔₂ (ℕ.suc l) l′) (encode T
+                                                 (coe eq1
+                                                  (coe (Uⁱʳ & ext (λ j → ext (λ p → U<-compute {l} {wf} {j} {p} ◾ U<-compute ⁻¹))) u′)
+                                                  ∷ η)))
+                    (cong (λ u → ⟦ T ⟧ᵀ (u ∷ η)) (subst-subst' eq1 eq2)))
+             (subst-env T T′ η)) r
