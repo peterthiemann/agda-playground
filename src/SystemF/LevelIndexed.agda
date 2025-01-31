@@ -7,12 +7,14 @@ open import Level
 open import Data.Nat using (ℕ; zero; suc) renaming (_⊔_ to _⊔ℕ_)
 open import Data.Fin using (Fin; zero; suc)
 open import Data.List using (List; []; _∷_; map; _++_; foldr)
+open import Data.List.Properties using (map-∘; map-cong)
 open import Data.List.NonEmpty using (List⁺; head; tail; [_]; _∷_; foldr₁; _⁺++⁺_; toList) renaming (map to map⁺)
+open import Data.List.NonEmpty.Properties using () renaming (map-∘ to map⁺-∘; map-cong to map⁺-cong)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.List.Relation.Unary.Any using (here; there)
 open import Data.Vec using (Vec; lookup; _∷_)
 
-open import Function using (id)
+open import Function using (id; _∘_)
 
 open import Relation.Binary.PropositionalEquality
   using (_≡_; _≢_; refl; sym; trans; cong; cong₂; subst; resp₂)
@@ -63,9 +65,12 @@ getLEV (LEV x) = x
 coe : ∀ {x y} → (eq : x ≡ y) → L⟦ x ⟧ → L⟦ y ⟧
 coe refl lx = lx
 
+lof : ℕ → Level → Level
+lof ℕ.zero = id
+lof (ℕ.suc n) = Level.suc ∘ lof n
+
 evalLV : Vec Level n → LV n → Level
-evalLV v ⟨ zero , x ⟩ = lookup v x
-evalLV v ⟨ ℕ.suc k , x ⟩ = Level.suc (evalLV v ⟨ k , x ⟩)
+evalLV v ⟨ k , x ⟩ = lof k (lookup v x)
 
 evalLX : NLX n → Vec Level n → Level*
 evalLX (VAR x) v = LEV (foldr₁ _⊔_ (map⁺ (evalLV v) x))
@@ -92,12 +97,12 @@ norm-suc OMG = OMG
 
 weakNLX : NLX n → NLX (ℕ.suc n)
 weakNLX (VAR x) = VAR (map⁺ LV.weak x)
-weakNLX (LEV l x) = LEV (Level.suc l) (map LV.weak x)
+weakNLX (LEV l x) = LEV l (map LV.weak x)
 weakNLX OMG = OMG
 
 weakNLV : NLV n → NLV (ℕ.suc n)
 weakNLV (VAR x) = VAR (map⁺ LV.weak x)
-weakNLV (LEV l x) = LEV (Level.suc l) (map LV.weak x)
+weakNLV (LEV l x) = LEV l (map LV.weak x)
 
 strongVar : LV (ℕ.suc n) → NLX n
 strongVar ⟨ k , Fin.zero ⟩ = OMG
@@ -174,6 +179,19 @@ data Type (n : ℕ) (Δ : LEnv n) : NLX n → Set where
 Env* : Vec Level n → LEnv n → Setω
 Env* v Δ = ∀ {l} → l ∈ Δ → Set (evalNLV l v)
 
+pushLV : ∀{ℓ} (v : Vec Level n) (x : LV n) → evalLV v x ≡ evalLV (ℓ ∷ v) (LV.weak x)
+pushLV v ⟨ k , x ⟩ = refl
+
+pushNLV : ∀ {ℓ} (v : Vec Level n) (l : NLV n) → evalNLV l v ≡ evalNLV (weakNLV l) (ℓ ∷ v)
+pushNLV{ℓ = ℓ} v (VAR x) = cong (foldr₁ _⊔_) (trans  (map⁺-cong (pushLV{ℓ = ℓ} v) x)  (map⁺-∘ {g = evalLV (ℓ ∷ v)}{f = LV.weak} x))
+pushNLV{ℓ = ℓ} v (LEV l x) = cong (foldr _⊔_ l) (trans  (map-cong (pushLV{ℓ = ℓ} v) x)  (map-∘ {g = evalLV (ℓ ∷ v)}{f = LV.weak} x))
+
+
+coe* : ∀ ℓ (v : Vec Level n) (Δ : LEnv n) → Env* v Δ → Env* (ℓ ∷ v) (map weakNLV Δ)
+coe* ℓ v (l ∷ Δ) η (here refl) rewrite sym (pushNLV{ℓ = ℓ} v l) = η (here refl)
+coe* ℓ v (l ∷ Δ) η (there x) = coe* ℓ v Δ (η ∘ there) x 
+
+
 ext* : ∀ {lev : NLV n} {v : Vec Level n} → Set (evalNLV lev v) → Env* v Δ → Env* v (lev ∷ Δ)
 ext* S η (here refl) = S
 ext* S η (there x) = η x
@@ -184,23 +202,23 @@ T⟦ _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ v η
   with T⟦ T₁ ⟧ v η | T⟦ T₂ ⟧ v η | evalLX l₁ v in eq₁ | evalLX l₂ v in eq₂
 ... | S₁ | S₂ | LEV x₁ | LEV x₂
   rewrite eq₁ | eq₂ | evalLX-norm⊔ l₁ l₂ v eq₁ eq₂
-  with LEV A₁ ← S₁ | LEV A₂ ← S₂ = LEV (A₁ → A₂)
+  = LEV (getLEV S₁ → getLEV S₂)
 ... | S₁ | S₂ | LEV x₁ | OMG
   rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGʳ l₁ l₂ v eq₁ eq₂
-  with LEV A₁ ← S₁ | OMG A₂ ← S₂
-  = OMG (A₁ → A₂)
+  = OMG (getLEV S₁ → getOMG S₂)
 ... | S₁ | S₂ | OMG | LEV x₂
   rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGˡ l₁ l₂ v eq₁ eq₂
-  with OMG A₁ ← S₁ | LEV A₂ ← S₂
-  = OMG (A₁ → A₂)
+  = OMG (getOMG S₁ → getLEV S₂)
 ... | S₁ | S₂ | OMG | OMG
   rewrite eq₁ | eq₂ | evalLX-norm⊔-OMG² l₁ l₂ v eq₁ eq₂
-  with OMG A₁ ← S₁ | OMG A₂ ← S₂
-  = OMG (A₁ → A₂)
+  = OMG (getOMG S₁ → getOMG S₂)
 T⟦ `∀ℓ_ {l′ = l′} T ⟧ v η
   with evalLX (strongNLX l′) v in eq
-... | LEV x = LEV (∀ (ℓ : Level) → getLEV (coe eq {!T⟦ T ⟧ (ℓ ∷ v) !}))
-... | OMG = OMG (∀ (ℓ : Level) → {!!})
+... | LEV x = LEV (∀ (ℓ : Level) → getLEV (coe eq (coe {!!} (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η)) )))
+... | OMG with l′ in leq
+... | VAR x = OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
+... | LEV ℓ x =  OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
+... | OMG = OMG (∀ (ℓ : Level) → getOMG (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
 T⟦ `∀α_,_ {l′ = l′} lev T ⟧ v η
   with evalLX l′ v in eq′
 ... | LEV x
