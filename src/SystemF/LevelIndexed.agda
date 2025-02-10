@@ -241,19 +241,6 @@ evalLX-var-var+ : ∀ {ℓ₁ ℓ₂} → (x₁  : List⁺ (LV n)) (x₂  : List
   → evalLX (VAR (x₁ ⁺++⁺ x₂)) v ≡ LEV (ℓ₁ ⊔ ℓ₂)
 evalLX-var-var+ (head₁ ∷ tail₁) x₂ v refl refl = cong LEV (evalLX-var-var head₁ tail₁ x₂ v refl refl)
 
-evalLX-lev-var :
-  ∀ {ℓ₂ ℓ₃ ℓ₄ : Level} →
-  (v   : Vec Level n)
-  (xh : LV n)
-  (xt  : List (LV n))
-  (x₂  : List (LV n))
-  (eq₁ : foldl₁ _⊔_ (map⁺ (evalLV v) (xh ∷ xt)) ≡ ℓ₃)
-  (eq₂ : foldl _⊔_ ℓ₂ (map (evalLV v) x₂) ≡ ℓ₄)
-  → foldl _⊔_ ℓ₂ (map (evalLV v) (xh ∷ xt ++ x₂))
-  ≡ foldl _⊔_ (ℓ₂ ⊔ foldl _⊔_ (evalLV v xh) (map (evalLV v) xt)) (map (evalLV v) x₂)
-evalLX-lev-var v xh [] x₂ eq₁ eq₂ = refl
-evalLX-lev-var v xh (x ∷ xt) x₂ eq₁ eq₂ = {!!}
-
 evalLX-lev-var+ :
   ∀ {ℓ₂ ℓ₃ ℓ₄ : Level} →
   (v   : Vec Level n)
@@ -262,12 +249,55 @@ evalLX-lev-var+ :
   (eq₁ : foldl₁ _⊔_ (map⁺ (evalLV v) x₁) ≡ ℓ₃)
   (eq₂ : foldl _⊔_ ℓ₂ (map (evalLV v) x₂) ≡ ℓ₄)
   → foldl _⊔_ ℓ₂ (map (evalLV v) (head x₁ ∷ tail x₁ ++ x₂)) ≡ ℓ₃ ⊔ ℓ₄
-evalLX-lev-var+ {ℓ₂ = ℓ₂} {ℓ₃} {ℓ₄} v (xh ∷ xt) x₂ eq₁ eq₂ =
+evalLX-lev-var+ {n} {ℓ₂} {.(foldl₁ _⊔_ (map⁺ (evalLV v) (xh ∷ [])))} {ℓ₄} v (xh ∷ []) ys refl eq₂ =
   begin
-    foldl _⊔_ ℓ₂ (map (evalLV v) (xh ∷ xt ++ x₂))
-  ≡⟨ foldl-assoc _⊔_ (λ x y z → refl) ℓ₂ (evalLV v xh) (map (evalLV v) (xt ++ x₂)) ⟩
-    ℓ₂ ⊔ foldl _⊔_ (evalLV v xh) (map (evalLV v) (xt ++ x₂))
-  ≡⟨ {!!} ⟩
+    foldl _⊔_ ℓ₂ (map (evalLV v) (xh ∷ [] ++ ys))
+  ≡⟨ foldl-assoc _⊔_ (λ x y z → refl) (evalLV v xh) ℓ₂ (map (evalLV v) ys) ⟩
+    evalLV v xh ⊔ foldl _⊔_ ℓ₂ (map (evalLV v) ys)
+  ≡⟨ cong (evalLV v xh ⊔_) eq₂ ⟩
+    evalLV v xh ⊔ ℓ₄
+  ≡⟨ refl ⟩
+    foldl₁ _⊔_ (map⁺ (evalLV v) (xh ∷ [])) ⊔ ℓ₄
+  ∎
+evalLX-lev-var+ {n} {ℓ₂} {ℓ₃} {ℓ₄} v (xh ∷ x ∷ xt) ys eq₁ eq₂ =
+  let ℓ₃′ = foldl _⊔_ (evalLV v xh) (map (evalLV v) xt) in
+  let eq₀ = trans (sym eq₁) (foldl-assoc _⊔_ (λ x y z → refl) (evalLV v x) (evalLV v xh) (map (evalLV v) xt)) in
+  let ih = evalLX-lev-var+ {n} {ℓ₂} {ℓ₃′} v (xh ∷ xt) ys refl eq₂ in
+  begin
+    foldl _⊔_ ℓ₂ (map (evalLV v) (xh ∷ (x ∷ xt) ++ ys))
+  ≡⟨ foldl-assoc _⊔_ (λ x y z → refl) (evalLV v x) (ℓ₂ ⊔ evalLV v xh) (map (evalLV v) (xt ++ ys)) ⟩
+    evalLV v x ⊔
+      foldl _⊔_ (ℓ₂ ⊔ evalLV v xh) (map (evalLV v) (xt ++ ys))
+  ≡⟨ cong (evalLV v x ⊔_) ih ⟩
+    evalLV v x ⊔ (ℓ₃′ ⊔ ℓ₄)
+  ≡⟨ sym (cong (ℓ₄ ⊔_) eq₀) ⟩
+    ℓ₃ ⊔ ℓ₄
+  ∎
+
+evalLX-lev-lev : ∀{ℓ₁ ℓ₂ ℓ₃ ℓ₄} →
+  (v   : Vec Level n)
+  (xs ys : List (LV n))
+  (eq₁ : (foldl _⊔_ ℓ₁ (map (evalLV v) xs)) ≡ ℓ₃)
+  (eq₂ : (foldl _⊔_ ℓ₂ (map (evalLV v) ys)) ≡ ℓ₄)
+  → foldl _⊔_ (ℓ₁ ⊔ ℓ₂) (map (evalLV v) (xs ++ ys)) ≡ ℓ₃ ⊔ ℓ₄
+evalLX-lev-lev {n} {ℓ₁} {ℓ₂} {ℓ₃} {ℓ₄} v [] ys refl eq₂ =
+  begin
+    foldl _⊔_ (ℓ₁ ⊔ ℓ₂) (map (evalLV v) ([] ++ ys))
+  ≡⟨ foldl-assoc _⊔_ (λ x y z → refl) ℓ₁ ℓ₂ (map (evalLV v) ys) ⟩
+    ℓ₁ ⊔ foldl _⊔_ ℓ₂ (map (evalLV v) ys)
+  ≡⟨ cong (ℓ₁ ⊔_) eq₂ ⟩
+    ℓ₃ ⊔ ℓ₄
+  ∎
+evalLX-lev-lev {n} {ℓ₁} {ℓ₂} {ℓ₃} {ℓ₄} v (x ∷ xs) ys eq₁ eq₂ =
+  let ℓ₃′ = foldl _⊔_ ℓ₁ (map (evalLV v) xs) in
+  let eq₀ = trans (sym eq₁) (foldl-assoc _⊔_ (λ x y z → refl) (evalLV v x) ℓ₁ (map (evalLV v) xs)) in
+  begin
+    foldl _⊔_ (ℓ₁ ⊔ ℓ₂) (map (evalLV v) ((x ∷ xs) ++ ys))
+  ≡⟨ foldl-assoc _⊔_ (λ x y z → refl) (evalLV v x) (ℓ₁ ⊔ ℓ₂) (map (evalLV v) (xs ++ ys)) ⟩
+    evalLV v x ⊔ foldl _⊔_ (ℓ₁ ⊔ ℓ₂) (map (evalLV v) (xs ++ ys))
+  ≡⟨ cong (evalLV v x ⊔_) (evalLX-lev-lev {n} {ℓ₁} {ℓ₂} {ℓ₃′} {ℓ₄} v xs ys refl eq₂)  ⟩
+    evalLV v x ⊔ (ℓ₃′ ⊔ ℓ₄)
+  ≡⟨ cong (ℓ₄ ⊔_) (sym eq₀) ⟩
     ℓ₃ ⊔ ℓ₄
   ∎
 
@@ -278,7 +308,7 @@ evalLX-norm⊔ : {x₁ x₂ : Level} (l₁ l₂ : NLX n) (v : Vec Level n)
 evalLX-norm⊔ (VAR x₁) (VAR x₂) v eq₁ eq₂ = evalLX-var-var+ x₁ x₂ v eq₁ eq₂
 evalLX-norm⊔ (VAR x₁) (LEV ℓ₂ x₂) v refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₂} v x₁ x₂ refl refl)
 evalLX-norm⊔ (LEV ℓ₁ x₁) (VAR x₂) v refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₁} v x₂ x₁ refl refl)
-evalLX-norm⊔ (LEV ℓ₁ x₁) (LEV ℓ₂ x₂) v eq₁ eq₂ = cong LEV {!!}
+evalLX-norm⊔ (LEV ℓ₁ x₁) (LEV ℓ₂ x₂) v refl refl = cong LEV (evalLX-lev-lev {ℓ₁ = ℓ₁}{ℓ₂} v x₁ x₂ refl refl)
 
 evalLX-norm⊔-OMGʳ : {x₁ : Level} (l₁ l₂ : NLX n) (v : Vec Level n) → evalLX l₁ v ≡ LEV x₁ → evalLX l₂ v ≡ OMG → evalLX (norm⊔ l₁ l₂) v ≡ OMG
 evalLX-norm⊔-OMGʳ (VAR x) OMG v eq₁ eq₂ = refl
