@@ -11,6 +11,12 @@ open import Data.List.Relation.Unary.Any using (here; there)
 open import Function  using (id; _∘_)
 
 open import Lib
+
+coe-coe : ∀{a}{A B : Set a} (x≡y : A ≡ B) (y≡x : B ≡ A) {p : A}
+  → (coe y≡x (coe x≡y p)) ≡ p
+coe-coe refl refl = refl
+
+
 import IRUniverse as IR
 
 module _ where
@@ -232,6 +238,10 @@ Uᵈ′ d l = U (Lᵈ′ d l)
 ... | inj₂ (inj₁ x₁) rewrite m≥n⇒m⊔n≡m (<⇒≤ x₁) = refl
 ... | inj₂ (inj₂ refl) rewrite ⊔-idem x = refl
 
+⟦⟧ℓ-suc : (d : DEnv δ) (l : LimLvl δ) → ⟦ sucℓ l ⟧ℓ′ d ≡ Lvl-suc (⟦ l ⟧ℓ′ d)
+⟦⟧ℓ-suc d (`fin x) = refl
+⟦⟧ℓ-suc d (`omg x) = refl
+
 Lᵈ′-⊔ : (d : DEnv δ) (l₁ : LimLvl δ) (l₂ : LimLvl δ) → Lᵈ′ d l₁ ⊔ Lᵈ′ d l₂ ≡ Lᵈ′ d (l₁ ⊔ℓ l₂)
 Lᵈ′-⊔ d (`fin x) (`fin y) = ⟦⟧ℓ-⊔ d x y
 Lᵈ′-⊔ d (`fin x) (`omg y)
@@ -269,99 +279,106 @@ coe* d x [] = []
 coe* {Δ = ll ∷ _} d x (u ∷ η) = coe (coel d x ll) u ∷ coe* d x η
 
 
-encode : (d : DEnv δ) (T : Type δ Δ l) (η : All (Uᵈ′ d) Δ) → Uᵈ′ d l
+
+Env* : DEnv δ → Env δ → Set
+Env* d Δ = All (Uᵈ′ d) Δ
+
+
+encode : (d : DEnv δ) (T : Type δ Δ l) (η : Env* d Δ) → Uᵈ′ d l
 encode d `ℕ η = ℕ'
 encode d (_`⇒_ {l₁ = l₁} {l₂ = l₂} T₁ T₂) η
-  with Lift≤ (⊔₁ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₁ η) | Lift≤ (⊔₂ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₂ η)
-... | A₁ | A₂
-  rewrite Lᵈ′-⊔ d l₁ l₂ = A₁ ⇒' A₂
+  = subst U (Lᵈ′-⊔ d l₁ l₂) (Lift≤ (⊔₁ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₁ η))
+    ⇒'
+    subst U (Lᵈ′-⊔ d l₁ l₂) (Lift≤ (⊔₂ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₂ η))
 encode d (` α) η = lookup η α
 encode d (`∀α_,_ {l′ = l′} l T) η
   with  ⊔₁ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d)
 ... | ≤-witness
   rewrite (⟦⟧ℓ-⊔ℓ d (sucℓ l) l′) =
-  Π' (U' {j = ⟦ l ⟧ℓ′ d} (<≤-trans IR.ℕ*ℕ-example.<suc (≤-trans {!!} ≤-witness)))
+  Π' (U' {j = ⟦ l ⟧ℓ′ d} (<≤-trans IR.ℕ*ℕ-example.<suc (≤-trans (inj₂ (sym (⟦⟧ℓ-suc d l))) ≤-witness)))
      λ u → let r = encode d T (coe  (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {⟦ l ⟧ℓ′ d} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η) in
          Lift≤ (⊔₂ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d)) r
 encode d (`∀ℓ_ {l = l} T) η = Π' Lvl' (λ x → let r = coe (sym (coel d x l)) (encode (DEnv-ext d x) T (coe* d x η))
-                                             in  Lift≤ (⊔₂ {!ω!} (Lᵈ′ d l)) r)
-
--- encode : (T : Type Δ l) → All U Δ → U l
--- encode `ℕ η = ℕ'
--- encode (_`⇒_ {l₁ = l₁} {l₂ = l₂} T₁ T₂) η = (Lift≤ (⊔₁ l₁ l₂) (encode T₁ η)) ⇒' Lift≤ (⊔₂ l₁ l₂) (encode T₂ η)
--- encode (` α) η = lookup η α
--- encode (`∀α_,_ {l′ = l′} l T) η =
---   Π' (U' {j = l} (<≤-trans IR.ℕ-example.<suc (⊔₁ (ℕ.suc l) l′)))
---      λ u → Lift≤ (⊔₂ (ℕ.suc l) l′)
---         (encode T (coe  (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η))
-
--- Env* : LEnv → Set
--- Env* Δ = All U Δ
-
--- ⟦_⟧ᵀ : (T : Type Δ l) → (η : Env* Δ) → Set
--- ⟦ T ⟧ᵀ η = El (encode T η)
+                                             in  Lift≤ (≤-trans (⊔₂ ω (Lᵈ′ d l)) (inj₂ (sym (⟦⟧ℓ-⊔ℓ d (`omg ℕ.zero) l)))) r)
 
 
--- -- type environments
--- data Ctx : LEnv → Set where
---   ∅     : Ctx []
---   _◁_   : Type Δ l → Ctx Δ → Ctx Δ          
---   _◁*_  : (l : Lvl) → Ctx Δ → Ctx (l ∷ Δ) 
-
--- variable
---   Γ Γ₁ Γ₂ Γ₂₁ Γ₂₂ : Ctx Δ
---   T T′ : Type Δ l
-
--- postulate
---   Twk : Type Δ l → Type (l′ ∷ Δ) l
---   _[_]T : Type (l′ ∷ Δ) l → Type Δ l′ → Type Δ l
-
--- --! inn
--- data inn : Type Δ l → Ctx Δ → Set where
---   here   : inn T (T ◁ Γ)
---   there  : inn T Γ → inn T (T′ ◁ Γ)
---   tskip  : inn T Γ → inn (Twk T) (l ◁* Γ)
+⟦_⟧ᵀ : (T : Type δ Δ l) (d : DEnv δ) → (η : Env* d Δ) → Set
+⟦ T ⟧ᵀ d η = El (encode d T η)
 
 
--- data Expr {Δ : LEnv} (Γ : Ctx Δ) : Type Δ l → Set where
---   #_    : (n : ℕ) → Expr Γ `ℕ
---   `suc  : Expr Γ `ℕ → Expr Γ `ℕ
---   `_    : ∀ {T : Type Δ l} → inn T Γ → Expr Γ T
---   ƛ_    : ∀ {T : Type Δ l} {T′ : Type Δ l′} → Expr (T ◁ Γ) T′ → Expr Γ (T `⇒ T′)
---   _·_   : ∀ {T : Type Δ l} {T′ : Type Δ l′} → Expr Γ (T `⇒ T′) → Expr Γ T → Expr Γ T′
---   Λ_⇒_  : ∀ (l : Lvl) → {T : Type (l ∷ Δ) l′} → Expr (l ◁* Γ) T → Expr Γ (`∀α l , T)
---   _∙_   : ∀ {T : Type (l ∷ Δ) l′} → Expr Γ (`∀α l , T) → (T′ : Type Δ l) → Expr Γ (T [ T′ ]T)
+-- type environments
+data Ctx : ∀ {δ} → Env δ → Set where
+  ∅     : Ctx {δ} []
+  _◁_   : Type δ Δ l → Ctx Δ → Ctx Δ          
+  _◁*_  : (l : LimLvl δ) → Ctx Δ → Ctx (l ∷ Δ)
+  ◁ℓ_   : Ctx Δ → Ctx (wkₗₑ Δ)
 
--- variable e e₁ e₂ e₃ : Expr Γ T
--- variable n : ℕ
+variable
+  Γ Γ₁ Γ₂ Γ₂₁ Γ₂₂ : Ctx {δ} Δ
+  T T′ : Type δ Δ l
 
--- -- value environments
+postulate
+  Twk : Type δ Δ l → Type δ (l′ ∷ Δ) l
+  _[_]T : Type δ (l′ ∷ Δ) l → Type δ Δ l′ → Type δ Δ l
+  _[_]ℓℓ : LimLvl (tt ∷ δ) → FinLvl δ → LimLvl δ
+  _[_]ℓ : ∀ {l : LimLvl (tt ∷ δ)} → Type (tt ∷ δ) (wkₗₑ Δ) l → (newl : FinLvl δ) → Type δ Δ (l [ newl ]ℓℓ)
 
--- Env : {Δ : LEnv} → Ctx Δ → Env* Δ → Set
--- Env {Δ} Γ η = ∀ l (T : Type Δ l) → (x : inn T Γ) → ⟦ T ⟧ᵀ η
+wkₗₜ : Type δ Δ l → Type (tt ∷ δ) (wkₗₑ Δ) (wkₗ′ l)
+wkₗₜ `ℕ = {!!}
+wkₗₜ (T `⇒ T₁) = {!!}
+wkₗₜ (` α) = {!!}
+wkₗₜ (`∀α l , T) = {!`∀α_,_!}
+wkₗₜ (`∀ℓ T) = {!`∀ℓ_!}
 
--- extend : ∀ {T : Type Δ l}{Γ : Ctx Δ}{η : Env* Δ}
---   → Env Γ η → ⟦ T ⟧ᵀ η → Env (T ◁ Γ) η
--- extend γ v _ _ here = v
--- extend γ v _ _ (there x) = γ _ _ x
-
--- postulate
---   extend-tskip : ∀ {Δ : LEnv} {Γ : Ctx Δ} {η : Env* Δ} {⟦α⟧ : U l} →
---     Env Γ η → Env (l ◁* Γ) (⟦α⟧ ∷ η)
-
---   subst-env : ∀ (T : Type (l′ ∷ Δ) l) (T′ : Type Δ l′) (η : Env* Δ) → ⟦ T ⟧ᵀ (encode T′ η ∷ η) ≡ ⟦ T [ T′ ]T ⟧ᵀ η
+--! inn
+data inn : Type δ Δ l → Ctx Δ → Set where
+  here   : inn T (T ◁ Γ)
+  there  : inn T Γ → inn T (T′ ◁ Γ)
+  tskip  : inn T Γ → inn (Twk T) (l ◁* Γ)
+  lskip  : inn T Γ → inn (wkₗₜ T) (◁ℓ Γ)
 
 
--- E⟦_⟧ : ∀ {T : Type Δ l}{Γ : Ctx Δ} → (e : Expr Γ T) → (η : Env* Δ) → (γ : Env Γ η) → ⟦ T ⟧ᵀ η
--- E⟦ # n ⟧ η γ = n
--- E⟦ `suc x ⟧ η γ = ℕ.suc (E⟦ x ⟧ η γ)
--- E⟦ ` x ⟧ η γ = γ _ _ x
--- E⟦ ƛ_ {l = l}{l′ = l′}{T = T}{T′ = T′} M ⟧ η γ =
---   λ x → let r = E⟦ M ⟧ η (extend γ (coe (ElLift≤ {l}{l ⊔ l′} (⊔₁ l l′) (encode T η)) x)) in
---         coe (sym (ElLift≤ (⊔₂ l l′) (encode T′ η))) r
--- -- λ x → E⟦ M ⟧ η (extend γ x)
--- E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
---   let f = E⟦ M ⟧ η γ ; a = E⟦ N ⟧ η γ in
+data Expr {δ} {Δ : Env δ} (Γ : Ctx Δ) : Type δ Δ l → Set where
+  ##_    : (n : ℕ) → Expr Γ `ℕ
+  `suc  : Expr Γ `ℕ → Expr Γ `ℕ
+  `_    : ∀ {T : Type δ Δ l} → inn T Γ → Expr Γ T
+  ƛ_    : ∀ {T : Type δ Δ l} {T′ : Type δ Δ l′} → Expr (T ◁ Γ) T′ → Expr Γ (T `⇒ T′)
+  _·_   : ∀ {T : Type δ Δ l} {T′ : Type δ Δ l′} → Expr Γ (T `⇒ T′) → Expr Γ T → Expr Γ T′
+  Λ_⇒_  : ∀ (l : LimLvl δ) → {T : Type δ (l ∷ Δ) l′} → Expr (l ◁* Γ) T → Expr Γ (`∀α l , T)
+  _∙_    : ∀ {T : Type δ (l ∷ Δ) l′} → Expr Γ (`∀α l , T) → (T′ : Type δ Δ l) → Expr Γ (T [ T′ ]T)
+  Λℓ_   : ∀ {T : Type (tt ∷ δ) (wkₗₑ Δ) (wkₗ′ l)} → Expr (◁ℓ Γ) T → Expr Γ (`∀ℓ T)
+  _·ℓ_  : ∀ {T : Type (tt ∷ δ) (wkₗₑ Δ) (wkₗ′ l)} → Expr Γ (`∀ℓ T) → (newl : FinLvl δ) → Expr Γ (T [ newl ]ℓ)
+
+variable e e₁ e₂ e₃ : Expr Γ T
+variable n : ℕ
+
+-- value environments
+
+VEnv : {Δ : Env δ} → (d : DEnv δ) → Ctx Δ → Env* d Δ → Set
+VEnv {δ} {Δ} d Γ η = ∀ l (T : Type δ Δ l) → (x : inn T Γ) → ⟦ T ⟧ᵀ d η
+
+extend : ∀ {d : DEnv δ} {T : Type δ Δ l}{Γ : Ctx Δ}{η : Env* d Δ}
+  → VEnv d Γ η → ⟦ T ⟧ᵀ d η → VEnv d (T ◁ Γ) η
+extend γ v _ _ here = v
+extend γ v _ _ (there x) = γ _ _ x
+
+postulate
+  extend-tskip : ∀ {d : DEnv δ} {Δ : Env δ} {Γ : Ctx Δ} {η : Env* d Δ} {⟦α⟧ : Uᵈ′ d l} →
+    VEnv d Γ η → VEnv d (l ◁* Γ) (⟦α⟧ ∷ η)
+
+  subst-env : ∀ {d : DEnv δ} (T : Type δ (l′ ∷ Δ) l) (T′ : Type δ Δ l′) (η : Env* d Δ) → ⟦ T ⟧ᵀ d (encode d T′ η ∷ η) ≡ ⟦ T [ T′ ]T ⟧ᵀ d η
+
+
+E⟦_⟧ : ∀ {T : Type δ Δ l}{Γ : Ctx Δ} → (e : Expr Γ T) (d : DEnv δ) (η : Env* d Δ) → (γ : VEnv d Γ η) → ⟦ T ⟧ᵀ d η
+E⟦ ## n ⟧ d η γ = n
+E⟦ `suc x ⟧ d η γ = ℕ.suc (E⟦ x ⟧ d η γ)
+E⟦ ` x ⟧ d η γ = γ _ _ x
+E⟦ ƛ_ {l = l₁}{l′ = l₂}{T = T₁}{T′ = T₂} M ⟧ d η γ
+  = λ x → let r = E⟦ M ⟧ d η (extend γ (coe (trans {!!} (ElLift≤ {Lᵈ′ d l₁} {Lᵈ′ d l₁ ⊔ Lᵈ′ d l₂} (⊔₁ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₁ η))) x))
+          in coe (sym (trans {!!} (ElLift≤ (⊔₂ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₂ η)))) r
+E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
+  let f = E⟦ M ⟧ η γ ; a = E⟦ N ⟧ η γ in
+  {!!}
 --   coe (ElLift≤ (⊔₂ l l′) (encode T′ η)) (f (coe (sym (ElLift≤ (⊔₁ l l′) (encode T η))) a))
 -- -- E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
 -- E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →

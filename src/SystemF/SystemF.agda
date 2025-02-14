@@ -9,6 +9,12 @@ open import Data.List.Relation.Unary.All using (All; []; _∷_; lookup; lookupAn
 open import Function  using (id)
 
 open import Lib
+
+coe-coe : ∀{a}{A B : Set a} (x≡y : A ≡ B) (y≡x : B ≡ A) {p : A}
+  → (coe y≡x (coe x≡y p)) ≡ p
+coe-coe refl refl = refl
+
+
 import IRUniverse as IR
 
 module _ where
@@ -171,5 +177,5 @@ E⟦ _∙_ {l = l} {l′ = l′}{T = T} M T′ ⟧ η γ =
   let eq1 = (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) in
   let eq2 = Uⁱʳ & (ext (λ j → ext (λ p → trans (U<-compute {l} {wf} {j} {p}) (sym U<-compute)))) in
   let r = F (coe eq2 u′) in
-  coe (trans (trans (cong (λ □ → Elⁱʳ (Lift≤ (⊔₂ (ℕ.suc l) l′) (encode T (□ ∷ η)))) (subst-subst' eq1 eq2 {u′}))
+  coe (trans (trans (cong (λ □ → Elⁱʳ (Lift≤ (⊔₂ (ℕ.suc l) l′) (encode T (□ ∷ η)))) (coe-coe eq2 eq1 {u′}))
                     (ElLift≤ (⊔₂ (ℕ.suc l) l′) (encode T (u′ ∷ η)))) (subst-env T T′ η)) r
