@@ -2,12 +2,13 @@ module SystemF+Level where
 
 open import Level using (zero)
 open import Data.Nat using ( ℕ; s≤s; z≤n; _<′_ ) renaming (_⊔_ to _⊔ℕ_; _+_ to _+ℕ_; _<_ to _<ℕ_ )
-open import Data.Nat.Properties using (+-identityʳ; +-suc; <-trans; <⇒<′; ⊔-idem; m≤n⇒m⊔n≡n; m≥n⇒m⊔n≡m; <⇒≤)
+open import Data.Nat.Properties using (+-identityʳ; +-suc; <-trans; <⇒<′; ⊔-idem; m≤n⇒m⊔n≡n; m≥n⇒m⊔n≡m; <⇒≤; <-irrefl; ≡-irrelevant)
 open import Data.Vec using (Vec)
 open import Data.List using (List; []; _∷_; length)
 open import Data.List.Membership.Propositional
 open import Data.List.Relation.Unary.All using (All; []; _∷_; lookup; lookupAny)
 open import Data.List.Relation.Unary.Any using (here; there)
+open import Data.Product.Properties using (×-≡,≡→≡ ; ×-≡,≡←≡; ×-≡,≡↔≡)
 open import Function  using (id; _∘_)
 
 open import Lib
@@ -31,8 +32,21 @@ module _ where
   _<ℕ*ℕ_ : ℕ × ℕ → ℕ × ℕ → Set
   _<ℕ*ℕ_ = Lexicographic._<_ _<ℕ_ (λ _ → _<ℕ_)
 
-  postulate
-    <-irrefl-ℕ*ℕ : Irreflexive _≡_ _<ℕ*ℕ_
+
+  <-irrefl-ℕ*ℕ : Irreflexive _≡_ _<ℕ*ℕ_
+  <-irrefl-ℕ*ℕ refl (Lexicographic.left x₁<x₂) = <-irrefl refl x₁<x₂
+  <-irrefl-ℕ*ℕ refl (Lexicographic.right y₁<y₂) = <-irrefl refl y₁<y₂
+
+  ≡-decompose : ∀ {x y : ℕ × ℕ} → (p : x ≡ y) → Σ (₁ x ≡ ₁ y) (λ p₁ → (Σ (₂ x ≡ ₂ y) (λ p₂ → p ≡ cong₂ _,_ p₁ p₂)))
+  ≡-decompose p
+    with ×-≡,≡←≡ p
+  ≡-decompose refl | refl , refl = refl , refl , refl
+
+  ≡-irrelevant-ℕ*ℕ : Irrelevant {A = ℕ × ℕ} _≡_
+  ≡-irrelevant-ℕ*ℕ p₁ p₂
+    with ≡-decompose p₁ | ≡-decompose p₂
+  ... | p₁-l , p₁-r , dec₁ | p₂-l , p₂-r , dec₂ =
+    trans dec₁ (trans (cong₂ (cong₂ _,_) (≡-irrelevant p₁-l p₂-l) (≡-irrelevant p₁-r p₂-r)) (sym dec₂))
 
   cmp-ℕ : (i j : ℕ) → i <ℕ j ⊎ j <ℕ i ⊎ i ≡ j
   cmp-ℕ ℕ.zero ℕ.zero = inj₂ (inj₂ refl)
@@ -105,6 +119,12 @@ variable ℓ ℓ′ ℓ₁ ℓ₂ ℓ₃ : Lvl
 <≤-trans i<j (inj₁ j<k) = <-trans-ℕ*ℕ i<j j<k
 <≤-trans i<j (inj₂ refl) = i<j
 
+≤-irrel : ∀ {i} {j} → (p q : i ≤ j) → p ≡ q
+≤-irrel (inj₁ x) (inj₁ y) = cong inj₁ (<-irr _ _)
+≤-irrel (inj₁ x) (inj₂ y) = ⊥-elim (<-irrefl-ℕ*ℕ y x)
+≤-irrel (inj₂ y) (inj₁ x) = ⊥-elim (<-irrefl-ℕ*ℕ y x)
+≤-irrel (inj₂ y) (inj₂ x) = cong inj₂ (≡-irrelevant-ℕ*ℕ y x)
+
 -- level variable environments
 
 LvlEnv = List ⊤
@@ -143,6 +163,15 @@ wkₗ′ : LimLvl δ → LimLvl (tt ∷ δ)
 wkₗ′ (`fin x) = `fin (wkₗ x)
 wkₗ′ (`omg x) = `omg x
 
+wkₗ-⊔ : (l₁ l₂ : LimLvl δ) → wkₗ′ (l₁ ⊔ℓ l₂) ≡ wkₗ′ l₁ ⊔ℓ wkₗ′ l₂
+wkₗ-⊔ (`fin x) (`fin y) = refl
+wkₗ-⊔ (`fin x) (`omg y) = refl
+wkₗ-⊔ (`omg x) (`fin y) = refl
+wkₗ-⊔ (`omg x) (`omg y) = refl
+
+wkₗ-suc : (l : LimLvl δ) → wkₗ′ (sucℓ l) ≡ sucℓ (wkₗ′ l)
+wkₗ-suc (`fin x) = refl
+wkₗ-suc (`omg x) = refl
 
 DEnv : LvlEnv → Set
 DEnv δ = tt ∈ δ → Lvl
@@ -292,12 +321,12 @@ encode d (_`⇒_ {l₁ = l₁} {l₂ = l₂} T₁ T₂) η
     subst U (Lᵈ′-⊔ d l₁ l₂) (Lift≤ (⊔₂ (Lᵈ′ d l₁) (Lᵈ′ d l₂)) (encode d T₂ η))
 encode d (` α) η = lookup η α
 encode d (`∀α_,_ {l′ = l′} l T) η
-  with  ⊔₁ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d)
-... | ≤-witness
-  rewrite (⟦⟧ℓ-⊔ℓ d (sucℓ l) l′) =
-  Π' (U' {j = ⟦ l ⟧ℓ′ d} (<≤-trans IR.ℕ*ℕ-example.<suc (≤-trans (inj₂ (sym (⟦⟧ℓ-suc d l))) ≤-witness)))
+  =
+  let ≤-witness = ⊔₁ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d) in
+  Π' (U' {j = ⟦ l ⟧ℓ′ d}
+         (<≤-trans IR.ℕ*ℕ-example.<suc (≤-trans (inj₂ (sym (⟦⟧ℓ-suc d l))) (≤-trans ≤-witness (inj₂ (sym (⟦⟧ℓ-⊔ℓ d (sucℓ l) l′)))))))
      λ u → let r = encode d T (coe  (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {⟦ l ⟧ℓ′ d} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) u ∷ η) in
-         Lift≤ (⊔₂ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d)) r
+         Lift≤ (≤-trans (⊔₂ (⟦ sucℓ l ⟧ℓ′ d) (⟦ l′ ⟧ℓ′ d)) (inj₂ (sym (⟦⟧ℓ-⊔ℓ d (sucℓ l) l′)))) r
 encode d (`∀ℓ_ {l = l} T) η = Π' Lvl' (λ x → let r = coe (sym (coel d x l)) (encode (DEnv-ext d x) T (coe* d x η))
                                              in  Lift≤ (≤-trans (⊔₂ ω (Lᵈ′ d l)) (inj₂ (sym (⟦⟧ℓ-⊔ℓ d (`omg ℕ.zero) l)))) r)
 
@@ -324,11 +353,11 @@ postulate
   _[_]ℓ : ∀ {l : LimLvl (tt ∷ δ)} → Type (tt ∷ δ) (wkₗₑ Δ) l → (newl : FinLvl δ) → Type δ Δ (l [ newl ]ℓℓ)
 
 wkₗₜ : Type δ Δ l → Type (tt ∷ δ) (wkₗₑ Δ) (wkₗ′ l)
-wkₗₜ `ℕ = {!!}
-wkₗₜ (T `⇒ T₁) = {!!}
+wkₗₜ `ℕ = `ℕ
+wkₗₜ (T₁ `⇒ T₂) = subst (Type _ _) (sym (wkₗ-⊔ _ _))  (wkₗₜ T₁ `⇒ wkₗₜ T₂)
 wkₗₜ (` α) = {!!}
-wkₗₜ (`∀α l , T) = {!`∀α_,_!}
-wkₗₜ (`∀ℓ T) = {!`∀ℓ_!}
+wkₗₜ (`∀α l , T) = subst (Type _ _) (trans (cong (_⊔ℓ _) (sym (wkₗ-suc l))) (sym (wkₗ-⊔ _ _))) {!`∀α l , ?!}
+wkₗₜ (`∀ℓ T) = subst (Type _ _) (sym (wkₗ-⊔ _ _)) (`∀ℓ {!!})
 
 --! inn
 data inn : Type δ Δ l → Ctx Δ → Set where
