@@ -384,3 +384,51 @@ T⟦ `∀α_,_ {l′ = l′} lev T ⟧ v η
 ... | OMG
   rewrite  evalLX-all-OMG v lev l′ eq′
   = OMG (∀ α → getOMG (coe eq′ (T⟦ T ⟧ v (ext*{v = v} α η))))
+
+
+----------------------------------------------------------------------
+-- towards expressions
+
+-- type environments
+data Ctx : (n : ℕ) → LEnv n → Set where
+  ∅     : Ctx n []
+  _◁_   : Type n Δ l′ → Ctx n Δ → Ctx n Δ          
+  _◁*_  : (l : NLV n) → Ctx n Δ → Ctx n (l ∷ Δ)
+  ◁ℓ_   : Ctx n Δ → Ctx (ℕ.suc n) (map weakNL Δ)
+
+variable
+  Γ Γ₁ Γ₂ Γ₂₁ Γ₂₂ : Ctx n Δ
+  T T′ : Type n Δ l′
+
+
+wkₗₑ : LEnv n → LEnv (ℕ.suc n)
+wkₗₑ = map weakNL
+wkₗ′ = weakNL
+
+
+postulate
+  Twk : Type n Δ l′ → Type n (l ∷ Δ) l′
+  _[_]T : Type n (l ∷ Δ) l′ → Type n Δ (nlx l)  → Type n Δ l′
+  _[_]ℓℓ : NLX (ℕ.suc n) → NLV n → NLX n
+  _[_]ℓ : Type (ℕ.suc n) (wkₗₑ Δ) l′ → (newl : NLV n) → Type n Δ (l′ [ newl ]ℓℓ)
+
+  wkₗₜ : Type n Δ l′ → Type (ℕ.suc n) (map weakNL Δ) (weakNL l′)
+
+--! inn
+data inn : Type n Δ l′ → Ctx n Δ → Set where
+  here   : inn T (T ◁ Γ)
+  there  : inn T Γ → inn T (T′ ◁ Γ)
+  tskip  : inn T Γ → inn (Twk T) (l ◁* Γ)
+  lskip  : inn T Γ → inn (wkₗₜ T) (◁ℓ Γ)
+
+data Expr {Δ : LEnv n} (Γ : Ctx n Δ) : Type n Δ l′ → Set where
+  -- #_    : (k : ℕ) → Expr Γ `ℕ
+  -- `suc  : Expr Γ `ℕ → Expr Γ `ℕ
+  `_     : ∀ {T : Type n Δ l′} → inn T Γ → Expr Γ T
+  ƛ_     : ∀ {T₁ : Type n Δ l₁} {T₂ : Type n Δ l₂} → Expr (T₁ ◁ Γ) T₂ → Expr Γ (T₁ `⇒ T₂)
+  _·_    : ∀ {T₁ : Type n Δ l₁} {T₂ : Type n Δ l₂} → Expr Γ (T₁ `⇒ T₂) → Expr Γ T₁ → Expr Γ T₂
+  Λ_⇒_  : ∀ (l : NLV n) → {T : Type n (l ∷ Δ) l′} → Expr (l ◁* Γ) T → Expr Γ (`∀α l , T)
+  _∙_    : ∀ {T : Type n (l ∷ Δ) l′} → Expr Γ (`∀α l , T) → (T′ : Type n Δ (nlx l)) → Expr Γ (T [ T′ ]T)
+  Λℓ_   : ∀ {T : Type (ℕ.suc n) (wkₗₑ Δ) (wkₗ′ l′)} → Expr (◁ℓ Γ) T → Expr Γ (`∀ℓ T)
+  _·ℓ_  : ∀ {T : Type (ℕ.suc n) (wkₗₑ Δ) (wkₗ′ l′)} → Expr Γ (`∀ℓ T) → (newl : NLV n) → Expr Γ (T [ newl ]ℓ)
+
