@@ -13,6 +13,7 @@ open import Data.List.NonEmpty.Properties using () renaming (map-∘ to map⁺-�
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.List.Relation.Unary.Any using (here; there)
 open import Data.Vec using (Vec; lookup; _∷_)
+open import Data.Product using (∃-syntax)
 
 open import Function using (id; _∘_)
 
@@ -432,3 +433,21 @@ data Expr {Δ : LEnv n} (Γ : Ctx n Δ) : Type n Δ l′ → Set where
   Λℓ_   : ∀ {T : Type (ℕ.suc n) (wkₗₑ Δ) (wkₗ′ l′)} → Expr (◁ℓ Γ) T → Expr Γ (`∀ℓ T)
   _·ℓ_  : ∀ {T : Type (ℕ.suc n) (wkₗₑ Δ) (wkₗ′ l′)} → Expr Γ (`∀ℓ T) → (newl : NLV n) → Expr Γ (T [ newl ]ℓ)
 
+
+variable e e₁ e₂ e₃ : Expr Γ T
+
+-- level environments
+
+DEnv : ℕ → Set
+DEnv = Vec Level
+
+
+-- value environments
+
+VEnv : {Δ : LEnv n} → (d : DEnv n) → Ctx n Δ → Env* d Δ → {!!}  -- Σ Level (λ l′ → (L⟦ evalLX l′ d ⟧))
+VEnv {n} {Δ} d Γ η = ∀ l′ (T : Type n Δ l′) → (x : inn T Γ) → {!T⟦ T ⟧ d η!} -- T⟦ T ⟧ d η
+
+-- extend : ∀ {d : DEnv δ} {T : Type δ Δ l}{Γ : Ctx Δ}{η : Env* d Δ}
+--   → VEnv d Γ η → ⟦ T ⟧ᵀ d η → VEnv d (T ◁ Γ) η
+-- extend γ v _ _ here = v
+-- extend γ v _ _ (there x) = γ _ _ x
