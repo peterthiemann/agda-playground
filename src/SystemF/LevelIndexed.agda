@@ -68,6 +68,9 @@ NLV n = NL n V
 NLX : ℕ → Set
 NLX n = NL n X
 
+OMGX : NLX n
+OMGX = OMG
+
 -- data NLX (n : ℕ) : Set where
 --   VAR : List⁺ (LV n) → NLX n
 --   LEV : Level → List (LV n) → NLX n
@@ -138,18 +141,6 @@ weakNL (VAR x) = VAR (map⁺ LV.weak x)
 weakNL (LEV l x) = LEV l (map LV.weak x)
 weakNL OMG = OMG
 
-strongVar : LV (ℕ.suc n) → NLX n
-strongVar ⟨ k , Fin.zero ⟩ = OMG
-strongVar ⟨ k , Fin.suc x ⟩ = VAR [ ⟨ k , x ⟩ ]
-
-strongVar* : List⁺ (LV (ℕ.suc n)) → NLX n
-strongVar* vs = foldl₁ norm⊔ (map⁺ strongVar vs)
-
-strongNLX : NLX (ℕ.suc n) → NLX n
-strongNLX (VAR x) = strongVar* x
-strongNLX (LEV l x) = foldl norm⊔ (LEV l []) (map strongVar x)
-strongNLX (OMG) = OMG
-
 nlx : NL n m → NLX n
 nlx (VAR x) = VAR x
 nlx (LEV l x) = LEV l x
@@ -200,26 +191,6 @@ foldl-suc y (x ∷ xs) = foldl-suc (y ⊔ x) xs
 
 foldl₁-suc : ∀ (x : List⁺ Level) → foldl₁ _⊔_ (map⁺ Level.suc x) ≡ Level.suc (foldl₁ _⊔_ x)
 foldl₁-suc (head₁ ∷ tail₁) = foldl-suc head₁ tail₁
-
-module _  (v : Vec Level n) where
-
-  evalLX-suc : (l : NLV n) → evalLX (norm-suc (nlx l)) v ≡ LEV (Level.suc (evalNLV l v))
-  evalLX-suc (VAR x) = cong LEV (trans (cong (foldl₁ _⊔_) (lift⁺-∘ {f = evalLV v} {g = LV.succ} {h = Level.suc} (eval-succ v) x))
-                                       (foldl₁-suc (map⁺ (evalLV v) x)))
-  evalLX-suc (LEV ℓ x) = cong LEV (trans (cong (foldl _⊔_ (Level.suc ℓ)) (lift-∘ {f = evalLV v} {g = LV.succ} {h = Level.suc} (eval-succ v) x))
-                                           (foldl-suc ℓ (map (evalLV v) x)))
-
-  evalLX-all : {x′ : Level} (lev : NLV n) (l′ : NLX n)
-    → evalLX l′ v ≡ LEV x′
-    → evalLX (norm⊔ (norm-suc (nlx lev)) l′) v ≡ LEV (Level.suc (evalNLV lev v) Level.⊔ x′)
-  evalLX-all lev (VAR x) eq = {!!}
-  evalLX-all lev (LEV x x₁) eq = {!!}
-
-  evalLX-all-OMG : (lev : NLV n) (l′ : NLX n)
-    → evalLX l′ v ≡ OMG
-    → evalLX (norm⊔ (norm-suc (nlx lev)) l′) v ≡ OMG
-  evalLX-all-OMG (VAR x) OMG eq = refl
-  evalLX-all-OMG (LEV x x₁) OMG eq = refl
 
 evalLX-var-var : ∀ {ℓ₁ ℓ₂} → (xh : LV n) (xt  : List (LV n)) (x₂  : List⁺ (LV n)) (v   : Vec Level n)
   (eq₁ : (foldl₁ _⊔_ (map⁺ (evalLV v) (xh ∷ xt))) ≡ ℓ₁) (eq₂ : foldl₁ _⊔_ (map⁺ (evalLV v) x₂) ≡ ℓ₂)
@@ -306,24 +277,48 @@ evalLX-lev-lev {n} {ℓ₁} {ℓ₂} {ℓ₃} {ℓ₄} v (x ∷ xs) ys eq₁ eq�
     ℓ₃ ⊔ ℓ₄
   ∎
 
+module _  (v : Vec Level n) where
 
-evalLX-norm⊔ : {x₁ x₂ : Level} (l₁ l₂ : NLX n) (v : Vec Level n)
-  → evalLX l₁ v ≡ LEV x₁ → evalLX l₂ v ≡ LEV x₂
-  → evalLX (norm⊔ l₁ l₂) v ≡ LEV (x₁ ⊔ x₂)
-evalLX-norm⊔ (VAR x₁) (VAR x₂) v eq₁ eq₂ = evalLX-var-var+ x₁ x₂ v eq₁ eq₂
-evalLX-norm⊔ (VAR x₁) (LEV ℓ₂ x₂) v refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₂} v x₁ x₂ refl refl)
-evalLX-norm⊔ (LEV ℓ₁ x₁) (VAR x₂) v refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₁} v x₂ x₁ refl refl)
-evalLX-norm⊔ (LEV ℓ₁ x₁) (LEV ℓ₂ x₂) v refl refl = cong LEV (evalLX-lev-lev {ℓ₁ = ℓ₁}{ℓ₂} v x₁ x₂ refl refl)
+  evalLX-norm⊔ : {x₁ x₂ : Level} (l₁ l₂ : NLX n)
+    → evalLX l₁ v ≡ LEV x₁ → evalLX l₂ v ≡ LEV x₂
+    → evalLX (norm⊔ l₁ l₂) v ≡ LEV (x₁ ⊔ x₂)
+  evalLX-norm⊔ (VAR x₁) (VAR x₂) eq₁ eq₂ = evalLX-var-var+ x₁ x₂ v eq₁ eq₂
+  evalLX-norm⊔ (VAR x₁) (LEV ℓ₂ x₂) refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₂} v x₁ x₂ refl refl)
+  evalLX-norm⊔ (LEV ℓ₁ x₁) (VAR x₂) refl refl = cong LEV (evalLX-lev-var+ {ℓ₂ = ℓ₁} v x₂ x₁ refl refl)
+  evalLX-norm⊔ (LEV ℓ₁ x₁) (LEV ℓ₂ x₂) refl refl = cong LEV (evalLX-lev-lev {ℓ₁ = ℓ₁}{ℓ₂} v x₁ x₂ refl refl)
 
-evalLX-norm⊔-OMGʳ : {x₁ : Level} (l₁ l₂ : NLX n) (v : Vec Level n) → evalLX l₁ v ≡ LEV x₁ → evalLX l₂ v ≡ OMG → evalLX (norm⊔ l₁ l₂) v ≡ OMG
-evalLX-norm⊔-OMGʳ (VAR x) OMG v eq₁ eq₂ = refl
-evalLX-norm⊔-OMGʳ (LEV x x₁) OMG v eq₁ eq₂ = refl
+  evalLX-norm⊔-OMGʳ : {x₁ : Level} (l₁ l₂ : NLX n) → evalLX l₁ v ≡ LEV x₁ → evalLX l₂ v ≡ OMG → evalLX (norm⊔ l₁ l₂) v ≡ OMG
+  evalLX-norm⊔-OMGʳ (VAR x) OMG eq₁ eq₂ = refl
+  evalLX-norm⊔-OMGʳ (LEV x x₁) OMG eq₁ eq₂ = refl
 
-evalLX-norm⊔-OMGˡ : {x₂ : Level} (l₁ l₂ : NLX n) (v : Vec Level n) → evalLX l₁ v ≡ OMG → evalLX l₂ v ≡ LEV x₂ → evalLX (norm⊔ l₁ l₂) v ≡ OMG
-evalLX-norm⊔-OMGˡ OMG l₂ v eq₁ eq₂ = refl
+  evalLX-norm⊔-OMGˡ : {x₂ : Level} (l₁ l₂ : NLX n) → evalLX l₁ v ≡ OMG → evalLX l₂ v ≡ LEV x₂ → evalLX (norm⊔ l₁ l₂) v ≡ OMG
+  evalLX-norm⊔-OMGˡ OMG l₂ eq₁ eq₂ = refl
 
-evalLX-norm⊔-OMG² : (l₁ l₂ : NLX n) (v : Vec Level n) → evalLX l₁ v ≡ OMG → evalLX l₂ v ≡ OMG → evalLX (norm⊔ l₁ l₂) v ≡ OMG
-evalLX-norm⊔-OMG² OMG OMG v eq₁ eq₂ = refl
+  evalLX-norm⊔-OMG² : (l₁ l₂ : NLX n) → evalLX l₁ v ≡ OMG → evalLX l₂ v ≡ OMG → evalLX (norm⊔ l₁ l₂) v ≡ OMG
+  evalLX-norm⊔-OMG² OMG OMG eq₁ eq₂ = refl
+
+  evalLX-suc : (l : NLV n) → evalLX (norm-suc (nlx l)) v ≡ LEV (Level.suc (evalNLV l v))
+  evalLX-suc (VAR x) = cong LEV (trans (cong (foldl₁ _⊔_) (lift⁺-∘ {f = evalLV v} {g = LV.succ} {h = Level.suc} (eval-succ v) x))
+                                       (foldl₁-suc (map⁺ (evalLV v) x)))
+  evalLX-suc (LEV ℓ x) = cong LEV (trans (cong (foldl _⊔_ (Level.suc ℓ)) (lift-∘ {f = evalLV v} {g = LV.succ} {h = Level.suc} (eval-succ v) x))
+                                           (foldl-suc ℓ (map (evalLV v) x)))
+
+  evalLX-all : {x′ : Level} (lev : NLV n) (l′ : NLX n)
+    → evalLX l′ v ≡ LEV x′
+    → evalLX (norm⊔ (norm-suc (nlx lev)) l′) v ≡ LEV (Level.suc (evalNLV lev v) Level.⊔ x′)
+  evalLX-all {x′ = x′} lev l′ eq =
+    begin
+      evalLX (norm⊔ (norm-suc (nlx lev)) l′) v
+    ≡⟨ evalLX-norm⊔ (norm-suc (nlx lev)) l′ (evalLX-suc lev) eq ⟩
+      LEV (Level.suc (evalNLV lev v) ⊔ x′)
+    ∎
+
+  evalLX-all-OMG : (lev : NLV n) (l′ : NLX n)
+    → evalLX l′ v ≡ OMG
+    → evalLX (norm⊔ (norm-suc (nlx lev)) l′) v ≡ OMG
+  evalLX-all-OMG (VAR x) OMG eq = refl
+  evalLX-all-OMG (LEV x x₁) OMG eq = refl
+
 
 LEnv : ℕ → Set
 LEnv n = List (NLV n)
@@ -335,7 +330,7 @@ variable l₁ l₂ l′ : NLX n
 data Type (n : ℕ) (Δ : LEnv n) : NLX n → Set where
   `_ : l ∈ Δ → Type n Δ (nlx l)
   _`⇒_ : Type n Δ l₁ → Type n Δ l₂ → Type n Δ (norm⊔ l₁ l₂)
-  `∀ℓ_ : Type (ℕ.suc n) (map weakNL Δ) l′ → Type n Δ (strongNLX l′)
+  `∀ℓ_ : Type (ℕ.suc n) (map weakNL Δ) l′ → Type n Δ OMG
   `∀α_,_ : (lev : NLV n) → Type n (lev ∷ Δ) l′ → Type n Δ (norm⊔ (norm-suc (nlx lev)) l′)
 
 Env* : Vec Level n → LEnv n → Setω
@@ -349,15 +344,6 @@ pushNLV{ℓ = ℓ} v (VAR x) = cong (foldl₁ _⊔_) (trans  (map⁺-cong (pushL
 pushNLV{ℓ = ℓ} v (LEV l x) = cong (foldl _⊔_ l) (trans  (map-cong (pushLV{ℓ = ℓ} v) x)  (map-∘ {g = evalLV (ℓ ∷ v)}{f = LV.weak} x))
 
 
-eval-strong-var :  ∀ {ℓ} (v  : Vec Level n) → (x : List⁺ (LV (ℕ.suc n))) → ∀ {y} → (eq : evalNL (strongVar* x) v ≡ LEV y) → evalLX (VAR x) (ℓ ∷ v) ≡ evalNL (strongVar* x) v
-eval-strong-var v (⟨ k , Fin.zero ⟩ ∷ tail₁) eq = {!!}
-eval-strong-var v (⟨ k , Fin.suc x ⟩ ∷ tail₁) eq = {!!}
-
-eval-strong : ∀ {ℓ} (v  : Vec Level n) → (l′ : NLX (ℕ.suc n)) → ∀ {x} → (eq : evalNL (strongNLX l′) v ≡ LEV x) → evalLX l′ (ℓ ∷ v) ≡ evalNL (strongNLX l′) v
-eval-strong v (VAR x) eq = {!!}
-eval-strong v (LEV x x₁) eq = {!!}
-
-
 coe* : ∀ ℓ (v : Vec Level n) (Δ : LEnv n) → Env* v Δ → Env* (ℓ ∷ v) (map weakNL Δ)
 coe* ℓ v (l ∷ Δ) η (here refl) rewrite sym (pushNLV{ℓ = ℓ} v l) = η (here refl)
 coe* ℓ v (l ∷ Δ) η (there x) = coe* ℓ v Δ (η ∘ there) x 
@@ -368,27 +354,27 @@ ext* S η (here refl) = S
 ext* S η (there x) = η x
 
 T⟦_⟧ : (T : Type n Δ l′) → (v : Vec Level n) → Env* v Δ → L⟦ evalLX l′ v ⟧
-T⟦ `_ {l = l} x ⟧ v η rewrite evalLX-LV v l = LEV (η x)
+T⟦ `_ {l = l} x ⟧ v η
+  rewrite evalLX-LV v l
+  = LEV (η x)
 T⟦ _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ v η
   with T⟦ T₁ ⟧ v η | T⟦ T₂ ⟧ v η | evalLX l₁ v in eq₁ | evalLX l₂ v in eq₂
 ... | S₁ | S₂ | LEV x₁ | LEV x₂
-  rewrite eq₁ | eq₂ | evalLX-norm⊔ l₁ l₂ v eq₁ eq₂
+  rewrite eq₁ | eq₂ | evalLX-norm⊔ v l₁ l₂ eq₁ eq₂
   = LEV (getLEV S₁ → getLEV S₂)
 ... | S₁ | S₂ | LEV x₁ | OMG
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGʳ l₁ l₂ v eq₁ eq₂
+  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGʳ v l₁ l₂ eq₁ eq₂
   = OMG (getLEV S₁ → getOMG S₂)
 ... | S₁ | S₂ | OMG | LEV x₂
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGˡ l₁ l₂ v eq₁ eq₂
+  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGˡ v l₁ l₂ eq₁ eq₂
   = OMG (getOMG S₁ → getLEV S₂)
 ... | S₁ | S₂ | OMG | OMG
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMG² l₁ l₂ v eq₁ eq₂
+  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMG² v l₁ l₂ eq₁ eq₂
   = OMG (getOMG S₁ → getOMG S₂)
 T⟦ `∀ℓ_ {l′ = l′} T ⟧ v η
-  with evalLX (strongNLX l′) v in eq
-... | LEV x = LEV (∀ (ℓ : Level) → getLEV (coe eq (coe {!!} (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η)) )))
-... | OMG with l′ in leq
+  with l′
 ... | VAR x = OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
-... | LEV ℓ x =  OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
+... | LEV ℓ x = OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
 ... | OMG = OMG (∀ (ℓ : Level) → getOMG (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
 T⟦ `∀α_,_ {l′ = l′} lev T ⟧ v η
   with evalLX l′ v in eq′
