@@ -150,8 +150,7 @@ nlx = FIN
 module _ (v : Vec Level n) where
 
   evalLX-LV : (l : NLV n) → evalLX (nlx l) v ≡ LEV (evalNLV l v)
-  evalLX-LV (VAR x) = refl
-  evalLX-LV (LEV l x) = refl
+  evalLX-LV x = refl
 
   eval-succ : (x : LV n) → evalLV v (LV.succ x) ≡ Level.suc (evalLV v x)
   eval-succ x = refl
@@ -356,7 +355,6 @@ ext* S η (there x) = η x
 
 T⟦_⟧ : (T : Type n Δ l′) → (v : Vec Level n) → Env* v Δ → L⟦ evalLX l′ v ⟧
 T⟦ `_ {l = l} x ⟧ v η
-  rewrite evalLX-LV v l
   = LEV (η x)
 T⟦ _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ v η
   with T⟦ T₁ ⟧ v η | T⟦ T₂ ⟧ v η | evalLX l₁ v in eq₁ | evalLX l₂ v in eq₂
@@ -471,12 +469,15 @@ E⟦_⟧ : ∀ {T : Type n Δ l′}{Γ : Ctx n Δ}
 -- E⟦ `suc x ⟧ η γ = ℕ.suc (E⟦ x ⟧ η γ)
 E⟦ ` x ⟧ d η γ = γ _ _ x
 E⟦ ƛ_ {l₁ = l₁}{l₂ = l₂}{T₁ = T₁}{T₂ = T₂} M ⟧ v η γ
-  = aux (evalLX l₁ v) (evalLX l₂ v) refl refl (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η)
-  where aux : (l*₁ l*₂ : Level*) (eq₁ : l*₁ ≡ evalLX l₁ v) (eq₂ : l*₂ ≡ evalLX l₂ v) (S₁ : L⟦ l*₁ ⟧) (S₂ : L⟦ l*₂ ⟧) → V⟦ T⟦ T₁ `⇒ T₂ ⟧ v η ⟧
-        aux (LEV x) (LEV x₁) eq₁ eq₂ S₁ S₂ = {!!}
-        aux (LEV x) OMG eq₁ eq₂ S₁ S₂ = {!!}
-        aux OMG (LEV x) eq₁ eq₂ S₁ S₂ = {!!}
-        aux OMG OMG eq₁ eq₂ S₁ S₂ = {!!}
+  = {!!}
+  -- = aux (evalLX l₁ v) (evalLX l₂ v) refl refl (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η)
+  -- where aux : (l*₁ l*₂ : Level*) (eq₁ : l*₁ ≡ evalLX l₁ v) (eq₂ : l*₂ ≡ evalLX l₂ v) (S₁ : L⟦ l*₁ ⟧) (S₂ : L⟦ l*₂ ⟧) → V⟦ T⟦ T₁ `⇒ T₂ ⟧ v η ⟧
+  --       aux (LEV x) (LEV x₁) eq₁ eq₂ S₁ S₂ = {!!}
+  --       aux (LEV x) OMG eq₁ eq₂ S₁ S₂ = {!!}
+  --       aux OMG (LEV x) eq₁ eq₂ S₁ S₂ = {!!}
+  --       aux OMG OMG eq₁ eq₂ S₁ S₂ = {!!}
+
+
 --   λ x → let r = E⟦ M ⟧ η (extend γ (coe (ElLift≤ {l}{l ⊔ l′} (⊔₁ l l′) (encode T η)) x)) in
 --         coe (sym (ElLift≤ (⊔₂ l l′) (encode T′ η))) r
 -- -- λ x → E⟦ M ⟧ η (extend γ x)
