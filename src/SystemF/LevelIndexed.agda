@@ -358,11 +358,16 @@ ext* : ∀ {lev : NLV n} {v : Vec Level n} → Set (evalNLV lev v) → Env* v Δ
 ext* S η (here refl) = S
 ext* S η (there x) = η x
 
-T-arrow-aux : (l₁* l₂* : Level*) (T₁ : L⟦ l₁* ⟧) (T₂ : L⟦ l₂* ⟧) → L⟦ l₁* ⊔* l₂* ⟧
-T-arrow-aux (LEV x) (LEV x₁) T₁ T₂ = LEV (getLEV T₁ → getLEV T₂)
-T-arrow-aux (LEV x) OMG T₁ T₂ = OMG (getLEV T₁ → getOMG T₂)
-T-arrow-aux OMG (LEV x) T₁ T₂ = OMG (getOMG T₁ → getLEV T₂)
-T-arrow-aux OMG OMG T₁ T₂ = OMG (getOMG T₁ → getOMG T₂)
+T-arrow-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) → L⟦ l₁* ⊔* l₂* ⟧
+T-arrow-aux (LEV X₁) (LEV X₂) = LEV (X₁ → X₂)
+T-arrow-aux (LEV X₁) (OMG X₂) = OMG (X₁ → X₂)
+T-arrow-aux (OMG X₁) (LEV X₂) = OMG (X₁ → X₂)
+T-arrow-aux (OMG X₁) (OMG X₂) = OMG (X₁ → X₂)
+
+-- T-arrow-aux (LEV x) (LEV x₁) S₁ S₂ = LEV (getLEV S₁ → getLEV S₂)
+-- T-arrow-aux (LEV x) OMG S₁ S₂ = OMG (getLEV S₁ → getOMG S₂)
+-- T-arrow-aux OMG (LEV x) S₁ S₂ = OMG (getOMG S₁ → getLEV S₂)
+-- T-arrow-aux OMG OMG S₁ S₂ = OMG (getOMG S₁ → getOMG S₂)
 
 postulate
   eval-norm-⊔ : (v : Vec Level n) → (evalLX l₁ v ⊔* evalLX l₂ v) ≡ evalLX (norm⊔ l₁ l₂) v
@@ -371,7 +376,7 @@ T⟦_⟧ : (T : Type n Δ l′) → (v : Vec Level n) → Env* v Δ → L⟦ eva
 T⟦ `_ {l = l} x ⟧ v η
   = LEV (η x)
 T⟦ _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ v η
-  = coe (eval-norm-⊔ v) (T-arrow-aux (evalLX l₁ v) (evalLX l₂ v) (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η))
+  = coe (eval-norm-⊔ v) (T-arrow-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η))
 T⟦ `∀ℓ_ {l′ = l′} T ⟧ v η
   with l′
 ... | FIN (VAR x) = OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
@@ -472,13 +477,13 @@ postulate
   subst-env : ∀ {d : DEnv n} (T : Type n (l ∷ Δ) l′) (T′ : Type n Δ (nlx l)) (η : Env* d Δ)
     → T⟦ T ⟧ d (ext* {v = d} (getLEV (T⟦ T′ ⟧ d η)) η) ≡ω₁ T⟦ T [ T′ ]T ⟧ d η
 
-E-lam-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ S₁ ⟧ → V⟦ S₂ ⟧) → V⟦ T-arrow-aux l₁* l₂* S₁ S₂ ⟧
+E-lam-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ S₁ ⟧ → V⟦ S₂ ⟧) → V⟦ T-arrow-aux S₁ S₂ ⟧
 E-lam-aux (LEV X₁) (LEV X₂) f = LEV λ z → getVLEV (f (LEV z))
 E-lam-aux (LEV X₁) (OMG X₂) f = OMG λ z → getVOMG (f (LEV z))
 E-lam-aux (OMG X₁) (LEV X₂) f = OMG λ z → getVLEV (f (OMG z))
 E-lam-aux (OMG X₁) (OMG X₂) f = OMG λ z → getVOMG (f (OMG z))
 
-E-app-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ T-arrow-aux l₁* l₂* S₁ S₂ ⟧) → (V⟦ S₁ ⟧ → V⟦ S₂ ⟧)
+E-app-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ T-arrow-aux S₁ S₂ ⟧) → (V⟦ S₁ ⟧ → V⟦ S₂ ⟧)
 E-app-aux (LEV X₁) (LEV X₂) (LEV f) (LEV a) = LEV (f a)
 E-app-aux (LEV X₁) (OMG X₂) (OMG f) (LEV a) = OMG (f a)
 E-app-aux (OMG X₁) (LEV X₂) (OMG f) (OMG a) = LEV (f a)
