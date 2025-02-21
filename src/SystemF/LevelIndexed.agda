@@ -79,6 +79,11 @@ OMGX = OMG
 --   OMG : NLX n
 
 Level* = Lvl* X
+_⊔*_ : Level* → Level* → Level*
+LEV x ⊔* LEV x₁ = LEV (x ⊔ x₁)
+LEV x ⊔* OMG = OMG
+OMG ⊔* LEV x = OMG
+OMG ⊔* OMG = OMG
 
 getLvl : Lvl* V → Level
 getLvl (LEV x) = x
@@ -353,23 +358,20 @@ ext* : ∀ {lev : NLV n} {v : Vec Level n} → Set (evalNLV lev v) → Env* v Δ
 ext* S η (here refl) = S
 ext* S η (there x) = η x
 
+T-arrow-aux : (l₁* l₂* : Level*) (T₁ : L⟦ l₁* ⟧) (T₂ : L⟦ l₂* ⟧) → L⟦ l₁* ⊔* l₂* ⟧
+T-arrow-aux (LEV x) (LEV x₁) T₁ T₂ = LEV (getLEV T₁ → getLEV T₂)
+T-arrow-aux (LEV x) OMG T₁ T₂ = OMG (getLEV T₁ → getOMG T₂)
+T-arrow-aux OMG (LEV x) T₁ T₂ = OMG (getOMG T₁ → getLEV T₂)
+T-arrow-aux OMG OMG T₁ T₂ = OMG (getOMG T₁ → getOMG T₂)
+
+postulate
+  eval-norm-⊔ : (v : Vec Level n) → (evalLX l₁ v ⊔* evalLX l₂ v) ≡ evalLX (norm⊔ l₁ l₂) v
+
 T⟦_⟧ : (T : Type n Δ l′) → (v : Vec Level n) → Env* v Δ → L⟦ evalLX l′ v ⟧
 T⟦ `_ {l = l} x ⟧ v η
   = LEV (η x)
 T⟦ _`⇒_ {l₁ = l₁}{l₂ = l₂} T₁ T₂ ⟧ v η
-  with T⟦ T₁ ⟧ v η | T⟦ T₂ ⟧ v η | evalLX l₁ v in eq₁ | evalLX l₂ v in eq₂
-... | S₁ | S₂ | LEV x₁ | LEV x₂
-  rewrite eq₁ | eq₂ | evalLX-norm⊔ v l₁ l₂ eq₁ eq₂
-  = LEV (getLEV S₁ → getLEV S₂)
-... | S₁ | S₂ | LEV x₁ | OMG
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGʳ v l₁ l₂ eq₁ eq₂
-  = OMG (getLEV S₁ → getOMG S₂)
-... | S₁ | S₂ | OMG | LEV x₂
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMGˡ v l₁ l₂ eq₁ eq₂
-  = OMG (getOMG S₁ → getLEV S₂)
-... | S₁ | S₂ | OMG | OMG
-  rewrite eq₁ | eq₂ | evalLX-norm⊔-OMG² v l₁ l₂ eq₁ eq₂
-  = OMG (getOMG S₁ → getOMG S₂)
+  = coe (eval-norm-⊔ v) (T-arrow-aux (evalLX l₁ v) (evalLX l₂ v) (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η))
 T⟦ `∀ℓ_ {l′ = l′} T ⟧ v η
   with l′
 ... | FIN (VAR x) = OMG (∀ (ℓ : Level) → getLEV (coe refl (T⟦ T ⟧ (ℓ ∷ v) (coe* ℓ v _ η))))
@@ -446,6 +448,13 @@ data V⟦_⟧ : {l* : Level*} → L⟦ l* ⟧ → Setω₁ where
   LEV : ∀ {ℓ} → {A : Set ℓ} → (a : A) → V⟦ LEV A ⟧
   OMG : {A : Setω} → (a : A) → V⟦ OMG A ⟧
 
+getVLEV : ∀ {ℓ}{A : Set ℓ} → V⟦ LEV A ⟧ → A
+getVLEV (LEV a) = a
+
+getVOMG : ∀ {A : Setω} → V⟦ OMG A ⟧ → A
+getVOMG (OMG a) = a
+
+
 VEnv : {Δ : LEnv n} → (d : DEnv n) → Ctx n Δ → Env* d Δ → Setω₁
 VEnv {n} {Δ} d Γ η = ∀ l′ (T : Type n Δ l′) → (x : inn T Γ) → V⟦ (T⟦ T ⟧ d η) ⟧
 
@@ -463,28 +472,37 @@ postulate
   subst-env : ∀ {d : DEnv n} (T : Type n (l ∷ Δ) l′) (T′ : Type n Δ (nlx l)) (η : Env* d Δ)
     → T⟦ T ⟧ d (ext* {v = d} (getLEV (T⟦ T′ ⟧ d η)) η) ≡ω₁ T⟦ T [ T′ ]T ⟧ d η
 
+E-lam-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ S₁ ⟧ → V⟦ S₂ ⟧) → V⟦ T-arrow-aux l₁* l₂* S₁ S₂ ⟧
+E-lam-aux (LEV X₁) (LEV X₂) f = LEV λ z → getVLEV (f (LEV z))
+E-lam-aux (LEV X₁) (OMG X₂) f = OMG λ z → getVOMG (f (LEV z))
+E-lam-aux (OMG X₁) (LEV X₂) f = OMG λ z → getVLEV (f (OMG z))
+E-lam-aux (OMG X₁) (OMG X₂) f = OMG λ z → getVOMG (f (OMG z))
+
+E-app-aux : {l₁* l₂* : Level*} (S₁ : L⟦ l₁* ⟧) (S₂ : L⟦ l₂* ⟧) (f : V⟦ T-arrow-aux l₁* l₂* S₁ S₂ ⟧) → (V⟦ S₁ ⟧ → V⟦ S₂ ⟧)
+E-app-aux (LEV X₁) (LEV X₂) (LEV f) (LEV a) = LEV (f a)
+E-app-aux (LEV X₁) (OMG X₂) (OMG f) (LEV a) = OMG (f a)
+E-app-aux (OMG X₁) (LEV X₂) (OMG f) (OMG a) = LEV (f a)
+E-app-aux (OMG X₁) (OMG X₂) (OMG f) (OMG a) = OMG (f a)
+
+
+coerce-forward : (l₁* l₂* : Level*) (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
+  → V⟦ code ⟧ → V⟦ coe l-eq code ⟧
+coerce-forward l₁* .l₁* refl code x = x
+
+coerce-backward : (l₁* l₂* : Level*) (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
+  → V⟦ coe l-eq code ⟧ → V⟦ code ⟧
+coerce-backward l₁* .l₁* refl code x = x
+
 E⟦_⟧ : ∀ {T : Type n Δ l′}{Γ : Ctx n Δ}
   → (e : Expr Γ T) →  (d : DEnv n) → (η : Env* d Δ) → (γ : VEnv d Γ η) → V⟦ T⟦ T ⟧ d η ⟧
 -- E⟦ # n ⟧ η γ = n
 -- E⟦ `suc x ⟧ η γ = ℕ.suc (E⟦ x ⟧ η γ)
 E⟦ ` x ⟧ d η γ = γ _ _ x
 E⟦ ƛ_ {l₁ = l₁}{l₂ = l₂}{T₁ = T₁}{T₂ = T₂} M ⟧ v η γ
-  = {!!}
-  -- = aux (evalLX l₁ v) (evalLX l₂ v) refl refl (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η)
-  -- where aux : (l*₁ l*₂ : Level*) (eq₁ : l*₁ ≡ evalLX l₁ v) (eq₂ : l*₂ ≡ evalLX l₂ v) (S₁ : L⟦ l*₁ ⟧) (S₂ : L⟦ l*₂ ⟧) → V⟦ T⟦ T₁ `⇒ T₂ ⟧ v η ⟧
-  --       aux (LEV x) (LEV x₁) eq₁ eq₂ S₁ S₂ = {!!}
-  --       aux (LEV x) OMG eq₁ eq₂ S₁ S₂ = {!!}
-  --       aux OMG (LEV x) eq₁ eq₂ S₁ S₂ = {!!}
-  --       aux OMG OMG eq₁ eq₂ S₁ S₂ = {!!}
-
-
---   λ x → let r = E⟦ M ⟧ η (extend γ (coe (ElLift≤ {l}{l ⊔ l′} (⊔₁ l l′) (encode T η)) x)) in
---         coe (sym (ElLift≤ (⊔₂ l l′) (encode T′ η))) r
--- -- λ x → E⟦ M ⟧ η (extend γ x)
--- E⟦ _·_ {l = l}{l′ = l′}{T = T}{T′ = T′} M N ⟧ η γ =
---   let f = E⟦ M ⟧ η γ ; a = E⟦ N ⟧ η γ in
---   coe (ElLift≤ (⊔₂ l l′) (encode T′ η)) (f (coe (sym (ElLift≤ (⊔₁ l l′) (encode T η))) a))
--- -- E⟦ M ⟧ η γ (E⟦ N ⟧ η γ)
+  = coerce-forward _ _ (eval-norm-⊔ v) _ (E-lam-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (λ z → E⟦ M ⟧ v η (extend γ z)))
+E⟦ _·_ {l₁ = l₁}{l₂ = l₂}{T₁ = T₁}{T₂ = T₂} M N ⟧ v η γ =
+  let f = E⟦ M ⟧ v η γ ; a = E⟦ N ⟧ v η γ in
+  E-app-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (coerce-backward _ _ (eval-norm-⊔ v) _ f) a
 -- E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →
 --   let η′ = coe (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η in
 --   let r = E⟦ M ⟧ η′ (extend-tskip γ) in
