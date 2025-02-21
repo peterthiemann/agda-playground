@@ -490,13 +490,13 @@ E-app-aux (OMG X₁) (LEV X₂) (OMG f) (OMG a) = LEV (f a)
 E-app-aux (OMG X₁) (OMG X₂) (OMG f) (OMG a) = OMG (f a)
 
 
-coerce-forward : (l₁* l₂* : Level*) (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
+coerce-forward : {l₁* l₂* : Level*} (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
   → V⟦ code ⟧ → V⟦ coe l-eq code ⟧
-coerce-forward l₁* .l₁* refl code x = x
+coerce-forward refl code x = x
 
-coerce-backward : (l₁* l₂* : Level*) (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
+coerce-backward : {l₁* l₂* : Level*} (l-eq : l₁* ≡ l₂*) (code : L⟦ l₁* ⟧)
   → V⟦ coe l-eq code ⟧ → V⟦ code ⟧
-coerce-backward l₁* .l₁* refl code x = x
+coerce-backward refl code x = x
 
 E⟦_⟧ : ∀ {T : Type n Δ l′}{Γ : Ctx n Δ}
   → (e : Expr Γ T) →  (d : DEnv n) → (η : Env* d Δ) → (γ : VEnv d Γ η) → V⟦ T⟦ T ⟧ d η ⟧
@@ -504,10 +504,10 @@ E⟦_⟧ : ∀ {T : Type n Δ l′}{Γ : Ctx n Δ}
 -- E⟦ `suc x ⟧ η γ = ℕ.suc (E⟦ x ⟧ η γ)
 E⟦ ` x ⟧ d η γ = γ _ _ x
 E⟦ ƛ_ {l₁ = l₁}{l₂ = l₂}{T₁ = T₁}{T₂ = T₂} M ⟧ v η γ
-  = coerce-forward _ _ (eval-norm-⊔ v) _ (E-lam-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (λ z → E⟦ M ⟧ v η (extend γ z)))
+  = coerce-forward (eval-norm-⊔ v) _ (E-lam-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (λ z → E⟦ M ⟧ v η (extend γ z)))
 E⟦ _·_ {l₁ = l₁}{l₂ = l₂}{T₁ = T₁}{T₂ = T₂} M N ⟧ v η γ =
   let f = E⟦ M ⟧ v η γ ; a = E⟦ N ⟧ v η γ in
-  E-app-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (coerce-backward _ _ (eval-norm-⊔ v) _ f) a
+  E-app-aux (T⟦ T₁ ⟧ v η) (T⟦ T₂ ⟧ v η) (coerce-backward (eval-norm-⊔ v) _ f) a
 -- E⟦ Λ_⇒_ {l′ = l′} l {T} M ⟧ η γ = λ α →
 --   let η′ = coe (Uⁱʳ & ext (λ j → ext (λ p → cong (λ acc → (U< {l} ⦃ acc ⦄ j p)) (Acc-prop _ wf)))) α ∷ η in
 --   let r = E⟦ M ⟧ η′ (extend-tskip γ) in
