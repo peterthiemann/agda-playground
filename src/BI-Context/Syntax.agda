@@ -130,25 +130,35 @@ is-null-context (Γ₁ ∥ Γ₂) = is-null-context Γ₁ × is-null-context Γ�
 
 data Pattern : Set where
   ⟪⟫ : Pattern
-  _⨾ˡ_ : Pattern → Context → Pattern
-  _⨾ʳ_ : Context → Pattern → Pattern
-  _∥_ : Pattern → Context → Pattern
+  _⨾ˡ_ : Pattern → (Γ : Context) → Pattern
+  _⨾ʳ_ : (Γ : Context) → Pattern → Pattern
+  _∥ˡ_ : Pattern → (Γ : Context) → Pattern
+  _∥ʳ_ : (Γ : Context) → Pattern → Pattern
 
 is-left-pattern : Pattern → Set
 is-left-pattern ⟪⟫ = ⊤
 is-left-pattern (𝓖 ⨾ˡ Γ) = is-left-pattern 𝓖
 is-left-pattern (Γ ⨾ʳ 𝓖) = is-null-context Γ × is-left-pattern 𝓖
-is-left-pattern (𝓖 ∥ Γ) = is-left-pattern 𝓖
+is-left-pattern (Γ ∥ʳ 𝓖) = is-left-pattern 𝓖
+is-left-pattern (𝓖 ∥ˡ Γ) = is-left-pattern 𝓖
+
+is-null-pattern : Pattern → Set
+is-null-pattern ⟪⟫ = ⊤
+is-null-pattern (𝓖 ⨾ˡ Γ) = is-null-pattern 𝓖 × is-null-context Γ
+is-null-pattern (Γ ⨾ʳ 𝓖) = is-null-context Γ × is-null-pattern 𝓖
+is-null-pattern (Γ ∥ʳ 𝓖) = is-null-context Γ × is-null-pattern 𝓖
+is-null-pattern (𝓖 ∥ˡ Γ) = is-null-pattern 𝓖 × is-null-context Γ
 
 variable
   Γ Γ₁ Γ₂ Γ₃ Γ₄ Γ′ : Context
-  𝓖 𝓖₁ 𝓖₂ : Pattern
+  𝓖 𝓖₁ 𝓖₂ 𝓖′ : Pattern
 
 ctx-pattern-fill : Pattern → Context → Context
 ctx-pattern-fill ⟪⟫ Γ = Γ
 ctx-pattern-fill (𝓖 ⨾ˡ Γ₂) Γ = ctx-pattern-fill 𝓖 Γ ⨾ Γ₂
 ctx-pattern-fill (Γ₁ ⨾ʳ 𝓖) Γ = Γ₁ ⨾ ctx-pattern-fill 𝓖 Γ
-ctx-pattern-fill (𝓖 ∥ Γ₂) Γ = ctx-pattern-fill 𝓖 Γ ∥ Γ₂
+ctx-pattern-fill (Γ₁ ∥ʳ 𝓖) Γ = Γ₁ ∥ ctx-pattern-fill 𝓖 Γ
+ctx-pattern-fill (𝓖 ∥ˡ Γ₂) Γ = ctx-pattern-fill 𝓖 Γ ∥ Γ₂
 
 _↓_ = ctx-pattern-fill
 
@@ -161,6 +171,27 @@ data ctx-split : Dir → Context → Context → Context → Set where
   ctx-split-unord    : ctx-split Unord Γ₁ Γ₂ (Γ₁ ∥ Γ₂)
   ctx-split-left     : ctx-split Left Γ₁ Γ₂ (Γ₂ ⨾ Γ₁)
   ctx-split-right    : ctx-split Right Γ₁ Γ₂ (Γ₁ ⨾ Γ₂)
+
+infix 10 _≅₁_ _≅₂_ _≅₃_ _≅₄_ _≅_
+
+data _≅₁_ : Context → Context → Set where
+  ≅-∅-unit-⨾-left   : (∅ ⨾ Γ) ≅₁ Γ
+  ≅-∅-unit-⨾-right  : (Γ ⨾ ∅) ≅₁ Γ
+  ≅-∅-unit-∥-left   : (∅ ∥ Γ) ≅₁ Γ
+  ≅-⨾-assoc         : ((Γ₁ ⨾ Γ₂) ⨾ Γ₃) ≅₁ (Γ₁ ⨾ (Γ₂ ⨾ Γ₃))
+  ≅-∥-assoc         : ((Γ₁ ∥ Γ₂) ∥ Γ₃) ≅₁ (Γ₁ ∥ (Γ₂ ∥ Γ₃))
+  ≅-∥-comm          : (Γ₁ ∥ Γ₂) ≅₁ (Γ₂ ∥ Γ₁)
+  
+data _≅₂_ : Context → Context → Set where
+  ≅-fwd  : Γ₁ ≅₁ Γ₂ → Γ₁ ≅₂ Γ₂
+  ≅-bwd  : Γ₁ ≅₁ Γ₂ → Γ₂ ≅₂ Γ₁
+
+data _≅₃_ : Context → Context → Set where
+  ≅-cong      : ∀ 𝓖 → Γ₁ ≅₂ Γ₂ → 𝓖 ↓ Γ₁ ≅₃ 𝓖 ↓ Γ₂
+
+data _≅₄_ : Context → Context → Set where
+  ≅-refl : Γ ≅₄ Γ
+  ≅-step : Γ₁ ≅₃ Γ₂ → Γ₂ ≅₄ Γ₃ → Γ₁ ≅₄ Γ₃
 
 data _≅_ : Context → Context → Set where
   ≅-refl : Γ ≅ Γ
@@ -182,19 +213,94 @@ data _≅_ : Context → Context → Set where
 ∅-unit-∥-right   : (Γ ∥ ∅) ≅ Γ
 ∅-unit-∥-right = ≅-trans ∥-comm ∅-unit-∥-left
 
+≅₄-sound : Γ₁ ≅₄ Γ₂ → Γ₁ ≅ Γ₂
+≅₄-sound = {!!}
+
+
+≅-ctx-extend :  ∀ d → Γ₁ ≅ Γ₂ → ctx-extend d Γ₁ T ≅ ctx-extend d Γ₂ T
+≅-ctx-extend Left Γ₁≅Γ₂ = ⨾-cong-right Γ₁≅Γ₂
+≅-ctx-extend Right Γ₁≅Γ₂ = ⨾-cong-left Γ₁≅Γ₂
+≅-ctx-extend Unord Γ₁≅Γ₂ = ∥-cong-right Γ₁≅Γ₂
+
+⨾-normalize-r : Context → Context → Context
+⨾-normalize-r Γ₁ ∅ = Γ₁
+⨾-normalize-r Γ₁ Γ₂ = Γ₁ ⨾ Γ₂
+
+⨾-normalize : Context → Context → Context
+⨾-normalize ∅ Γ₂ = Γ₂
+⨾-normalize $[ T ] Γ₂ = ⨾-normalize-r $[ T ] Γ₂
+⨾-normalize (Γ₁ ⨾ Γ₃) Γ₂ = Γ₁ ⨾ ⨾-normalize Γ₃ Γ₂
+⨾-normalize Γ@(Γ₁ ∥ Γ₃) Γ₂ = ⨾-normalize-r Γ Γ₂ 
+
+⨾-normalize-∅ : ⨾-normalize Γ ∅ ≡ Γ
+⨾-normalize-∅ {∅} = refl
+⨾-normalize-∅ {$[ x ]} = refl
+⨾-normalize-∅ {Γ ⨾ Γ₁} = cong (Γ ⨾_) ⨾-normalize-∅
+⨾-normalize-∅ {Γ ∥ Γ₁} = refl
+
+∥-normalize-r : Context → Context → Context
+∥-normalize-r Γ₁ ∅ = Γ₁
+∥-normalize-r Γ₁ Γ₂ = Γ₁ ∥ Γ₂
+
+∥-normalize : Context → Context → Context
+∥-normalize ∅ Γ₂ = Γ₂
+∥-normalize $[ T ] Γ₂ = ∥-normalize-r $[ T ] Γ₂
+∥-normalize Γ@(Γ₁ ⨾ Γ₃) Γ₂ = ∥-normalize-r Γ Γ₂
+∥-normalize (Γ₁ ∥ Γ₃) Γ₂ = Γ₁ ∥ ∥-normalize Γ₃ Γ₂
+
+≅-normalize : Context → Context
+≅-normalize ∅ = ∅
+≅-normalize $[ T ] = $[ T ]
+≅-normalize (Γ₁ ⨾ Γ₂) = ⨾-normalize (≅-normalize Γ₁) (≅-normalize Γ₂)
+≅-normalize (Γ₁ ∥ Γ₂) = ∥-normalize (≅-normalize Γ₁) (≅-normalize Γ₂)
+
+⨾-normalize-r-sound : ⨾-normalize-r Γ₁ Γ₂ ≅ (Γ₁ ⨾ Γ₂)
+⨾-normalize-r-sound {Γ₁} {∅} = ≅-sym ∅-unit-⨾-right
+⨾-normalize-r-sound {Γ₁} {$[ x ]} = ≅-refl
+⨾-normalize-r-sound {Γ₁} {Γ₂ ⨾ Γ₃} = ≅-refl
+⨾-normalize-r-sound {Γ₁} {Γ₂ ∥ Γ₃} = ≅-refl
+
+⨾-normalize-sound : ⨾-normalize Γ₁ Γ₂ ≅ (Γ₁ ⨾ Γ₂)
+⨾-normalize-sound {∅} {Γ₂} = ≅-sym ∅-unit-⨾-left
+⨾-normalize-sound {$[ x ]} {Γ₂} = ⨾-normalize-r-sound
+⨾-normalize-sound {Γ₁ ⨾ Γ₃} {Γ₂} = ≅-trans
+                                     (⨾-cong-right {Γ₁ = ⨾-normalize Γ₃ Γ₂} {Γ₂ = Γ₃ ⨾ Γ₂} {Γ₃ = Γ₁} ⨾-normalize-sound)
+                                     (≅-sym ⨾-assoc)
+⨾-normalize-sound {Γ₁ ∥ Γ₃} {Γ₂} = ⨾-normalize-r-sound
+
+∥-normalize-r-sound : ∥-normalize-r Γ₁ Γ₂ ≅ (Γ₁ ∥ Γ₂)
+∥-normalize-r-sound {Γ₁} {∅} = ≅-sym ∅-unit-∥-right
+∥-normalize-r-sound {Γ₁} {$[ x ]} = ≅-refl
+∥-normalize-r-sound {Γ₁} {Γ₂ ⨾ Γ₃} = ≅-refl
+∥-normalize-r-sound {Γ₁} {Γ₂ ∥ Γ₃} = ≅-refl
+
+∥-normalize-sound : ∥-normalize Γ₁ Γ₂ ≅ (Γ₁ ∥ Γ₂)
+∥-normalize-sound {∅} {Γ₂} = ≅-sym ∅-unit-∥-left
+∥-normalize-sound {$[ x ]} {Γ₂} = ∥-normalize-r-sound
+∥-normalize-sound {Γ₁ ⨾ Γ₃} {Γ₂} = ∥-normalize-r-sound
+∥-normalize-sound {Γ₁ ∥ Γ₃} {Γ₂} = ≅-trans (∥-cong-right ∥-normalize-sound) (≅-sym ∥-assoc)
+
+≅-normalize-sound : ≅-normalize Γ ≅ Γ
+≅-normalize-sound {∅} = ≅-refl
+≅-normalize-sound {$[ T ]} = ≅-refl
+≅-normalize-sound {Γ₁ ⨾ Γ₂} = ≅-trans ⨾-normalize-sound (≅-trans (⨾-cong-right ≅-normalize-sound) (⨾-cong-left ≅-normalize-sound))
+≅-normalize-sound {Γ₁ ∥ Γ₂} = ≅-trans ∥-normalize-sound (≅-trans (∥-cong-right ≅-normalize-sound) (∥-cong-left ≅-normalize-sound))
+
 data _≼_ : Context → Context → Set where
   ≼-≅ : Γ₁ ≅ Γ₂ → Γ₁ ≼ Γ₂
   ≼-trans : Γ₁ ≼ Γ₂ → Γ₂ ≼ Γ₃ → Γ₁ ≼ Γ₃
   ≼-weak : ((Γ₁ ⨾ Γ₂) ∥ (Γ₃ ⨾ Γ₄)) ≼ ((Γ₁ ∥ Γ₃) ⨾ (Γ₂ ∥ Γ₄))
   ≼-⨾-cong-left : Γ₁ ≼ Γ₂ → (Γ₁ ⨾ Γ₃) ≼ (Γ₂ ⨾ Γ₃)
   ≼-⨾-cong-right : Γ₁ ≼ Γ₂ → (Γ₃ ⨾ Γ₁) ≼ (Γ₃ ⨾ Γ₂)
+  ≼-∥-cong-right : Γ₁ ≼ Γ₂ → (Γ₃ ∥ Γ₁) ≼ (Γ₃ ∥ Γ₂)
   ≼-∥-cong-left : Γ₁ ≼ Γ₂ → (Γ₁ ∥ Γ₃) ≼ (Γ₂ ∥ Γ₃)
 
 ≼-pattern-cong : Γ₂ ≼ Γ₁ → (𝓖 ↓ Γ₂) ≼ (𝓖 ↓ Γ₁)
 ≼-pattern-cong {𝓖 = ⟪⟫} Γ₂≼Γ₁ = Γ₂≼Γ₁
 ≼-pattern-cong {𝓖 = 𝓖 ⨾ˡ Γ} Γ₂≼Γ₁ = ≼-⨾-cong-left (≼-pattern-cong Γ₂≼Γ₁)
 ≼-pattern-cong {𝓖 = Γ ⨾ʳ 𝓖} Γ₂≼Γ₁ = ≼-⨾-cong-right (≼-pattern-cong Γ₂≼Γ₁)
-≼-pattern-cong {𝓖 = 𝓖 ∥ Γ} Γ₂≼Γ₁ = ≼-∥-cong-left (≼-pattern-cong Γ₂≼Γ₁)
+≼-pattern-cong {𝓖 = Γ ∥ʳ 𝓖} Γ₂≼Γ₁ = ≼-∥-cong-right (≼-pattern-cong Γ₂≼Γ₁)
+≼-pattern-cong {𝓖 = 𝓖 ∥ˡ Γ} Γ₂≼Γ₁ = ≼-∥-cong-left (≼-pattern-cong Γ₂≼Γ₁)
 
 data _∋_ : Context → Type → Set where
   here   : $[ T ] ∋ T
@@ -212,25 +318,32 @@ data eff-split : Dir → Eff → Eff → Set where
 
 
 data Expr : Context → Type → Eff → Set where
-  var  : Expr $[ T ] T Pure
+  var  : Γ ≡ $[ T ] → Expr Γ T Pure
+  -- var' : is-null-pattern 𝓖 → Expr (𝓖 ↓ $[ T ]) T Pure
   lam  : (d : Dir) → Expr (ctx-extend d Γ T₁) T₂ ε → Expr Γ (T₁ ⇒[ d , ε ] T₂) Pure
   app  : (d : Dir) → ctx-split d Γ₁ Γ₂ Γ → eff-split d ε₁ ε₂
        → Expr Γ₁ (T₂ ⇒[ d , ε ] T₁) ε₁ → Expr Γ₂ T₂ ε₂
        → Expr Γ T₁ (ε₁ ⊔ ε₂ ⊔ ε)
-  unit : Expr ∅ Unit Pure
-  _⨾_   : Expr Γ Unit ε₁ → Expr (𝓖 ↓ ∅) T ε₂ → (ε₁ ≡ Impure → is-left-pattern 𝓖)
-        → Expr (𝓖 ↓ Γ) T (ε₁ ⊔ ε₂)
+  unit : Expr ∅ Unit Pure 
+  _⨾_   : Expr Γ Unit ε₁ → Expr (𝓖 ↓ ∅) T ε₂
+        → (ε₁ ≡ Impure → is-left-pattern 𝓖)
+        → Γ′ ≡ (𝓖 ↓ Γ)
+        → Expr Γ′ T (ε₁ ⊔ ε₂)
   let1  : Expr Γ T₁ ε₁ → Expr (𝓖 ↓ $[ T₁ ]) T ε₂ → (ε₁ ≡ Impure → is-left-pattern 𝓖)
-        → Expr (𝓖 ↓ Γ) T (ε₁ ⊔ ε₂)
+        → Γ′ ≡ (𝓖 ↓ Γ)
+        → Expr Γ′ T (ε₁ ⊔ ε₂)
   prod : (d : Dir) → ctx-split d Γ₁ Γ₂ Γ → eff-split d ε₁ ε₂
        → Expr Γ₁ T₁ ε₁ → Expr Γ₂ T₂ ε₂
        → Expr Γ (T₁ ⊗[ d ] T₂) (ε₁ ⊔ ε₂)
   case-⊗ : (d : Dir) → Expr Γ (T₁ ⊗[ d ] T₂) ε₁ →  Expr (𝓖 ↓ ctx-extend d ($[ T₁ ]) T₂) T ε₂ → (ε₁ ≡ Impure → is-left-pattern 𝓖)
-         → Expr (𝓖 ↓ Γ) T (ε₁ ⊔ ε₂)
-  inj   : ∀{f : Fin n → Type} → (i : Fin n) → Expr Γ (f i) ε → Expr Γ (ΣΣ f) ε
+        → Γ′ ≡ (𝓖 ↓ Γ)
+         → Expr Γ′ T (ε₁ ⊔ ε₂)
+  inj   : ∀{f : Fin n → Type} → (i : Fin n) → Expr Γ (f i) ε
+        → Expr Γ (ΣΣ f) ε
   case-ΣΣ : ∀{f : Fin n → Type} → Expr Γ (ΣΣ f) ε₁ → ((i : Fin n) → Expr (𝓖 ↓ $[ f i ]) T ε₂) → (ε₁ ≡ Impure → is-left-pattern 𝓖)
-          → Expr (𝓖 ↓ Γ) T (ε₁ ⊔ ε₂)
-  sub : Γ₂ ≼ Γ₁ → ε₁ ⊑ ε₂ → Expr Γ₁ T ε₁ → Expr Γ₂ T ε₂
+        → Γ′ ≡ (𝓖 ↓ Γ)
+        → Expr Γ′ T (ε₁ ⊔ ε₂)
+  sub-ctx : Γ₂ ≼ Γ₁ → ε₁ ⊑ ε₂ → Expr Γ₁ T ε₁ → Expr Γ₂ T ε₂
 
 -- processes
 
@@ -254,7 +367,7 @@ data Proc : Context → Set where
 variable P P₁ P₂ P₃ : Proc Γ
 
 p-conv : Γ₁ ≅ Γ₂ → Proc Γ₁ → Proc Γ₂
-p-conv Γ₁≅Γ₂ ⟨ M ⟩ = ⟨ (sub (≼-≅ (≅-sym Γ₁≅Γ₂)) ⊑-refl M) ⟩
+p-conv Γ₁≅Γ₂ ⟨ M ⟩ = ⟨ (sub-ctx (≼-≅ (≅-sym Γ₁≅Γ₂)) ⊑-refl M) ⟩
 p-conv Γ₁≅Γ₂ (mix Γ≅ P₁ P₂) = mix (≅-trans Γ≅ Γ₁≅Γ₂) P₁ P₂
 p-conv Γ₁≅Γ₂ (ν b₁ b₂ S Sb₁ Sb₂ P) = ν b₁ b₂ S Sb₁ Sb₂ (p-conv (∥-cong-right Γ₁≅Γ₂) P)
 
