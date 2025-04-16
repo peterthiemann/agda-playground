@@ -186,15 +186,15 @@ data ctx-split : Dir → Context → Context → Context → Set where
   ctx-split-left     : ctx-split Left Γ₁ Γ₂ (Γ₂ ⨾ Γ₁)
   ctx-split-right    : ctx-split Right Γ₁ Γ₂ (Γ₁ ⨾ Γ₂)
 
-infix 10 _≅₁_ _≅₂_ _≅₃_ _≅₄_
+infix 10 _≅₁_ _≅₂_ _≅₃_ _≅₄_ _≅_
 
 data _≅₁_ : Context → Context → Set where
-  ≅-∅-unit-⨾-left   : (∅ ⨾ Γ) ≅₁ Γ
-  ≅-∅-unit-⨾-right  : (Γ ⨾ ∅) ≅₁ Γ
-  ≅-∅-unit-∥-left   : (∅ ∥ Γ) ≅₁ Γ
-  ≅-⨾-assoc         : ((Γ₁ ⨾ Γ₂) ⨾ Γ₃) ≅₁ (Γ₁ ⨾ (Γ₂ ⨾ Γ₃))
-  ≅-∥-assoc         : ((Γ₁ ∥ Γ₂) ∥ Γ₃) ≅₁ (Γ₁ ∥ (Γ₂ ∥ Γ₃))
-  ≅-∥-comm          : (Γ₁ ∥ Γ₂) ≅₁ (Γ₂ ∥ Γ₁)
+  ≅₁-∅-unit-⨾-left   : (∅ ⨾ Γ) ≅₁ Γ
+  ≅₁-∅-unit-⨾-right  : (Γ ⨾ ∅) ≅₁ Γ
+  ≅₁-∅-unit-∥-left   : (∅ ∥ Γ) ≅₁ Γ
+  ≅₁-⨾-assoc         : ((Γ₁ ⨾ Γ₂) ⨾ Γ₃) ≅₁ (Γ₁ ⨾ (Γ₂ ⨾ Γ₃))
+  ≅₁-∥-assoc         : ((Γ₁ ∥ Γ₂) ∥ Γ₃) ≅₁ (Γ₁ ∥ (Γ₂ ∥ Γ₃))
+  ≅₁-∥-comm          : (Γ₁ ∥ Γ₂) ≅₁ (Γ₂ ∥ Γ₁)
   
 data _≅₂_ : Context → Context → Set where
   ≅-fwd  : Γ₁ ≅₁ Γ₂ → Γ₁ ≅₂ Γ₂
@@ -232,6 +232,12 @@ data _≅₄_ : Context → Context → Set where
 ≅₄-sym ≅-refl = ≅-refl
 ≅₄-sym (≅-step x Γ≅) = ≅₄-trans (≅₄-sym Γ≅) (≅₄←≅₃ (≅₃-sym x))
 
+≅₄-∥-comm : (Γ₁ ∥ Γ₂) ≅₄ (Γ₂ ∥ Γ₁)
+≅₄-∥-comm = ≅₄←≅₁ ≅₁-∥-comm
+
+≅₄-∥-assoc : ((Γ₁ ∥ Γ₂) ∥ Γ₃) ≅₄ (Γ₁ ∥ (Γ₂ ∥ Γ₃))
+≅₄-∥-assoc = ≅₄←≅₁ ≅₁-∥-assoc
+
 ≅₃-cong : ∀ 𝓖 → Γ₁ ≅₃ Γ₂ → 𝓖 ↓ Γ₁ ≅₃ 𝓖 ↓ Γ₂
 ≅₃-cong 𝓖 (≅-cong{Γ₁ = Γ₁}{Γ₂ = Γ₂} 𝓖₁ x) rewrite pat-∘-↓{𝓖}{𝓖₁}{Γ₁} |  pat-∘-↓{𝓖}{𝓖₁}{Γ₂} = ≅-cong (pat-∘ 𝓖 𝓖₁) x 
 
@@ -239,6 +245,23 @@ data _≅₄_ : Context → Context → Set where
 ≅₄-cong 𝓖 ≅-refl = ≅-refl
 ≅₄-cong 𝓖 (≅-step x Γ≅) = ≅-step (≅₃-cong 𝓖 x) (≅₄-cong 𝓖 Γ≅)
 
+≅₄-⨾-cong-right :  Γ₁ ≅₄ Γ₂ → (Γ ⨾ Γ₁) ≅₄ (Γ ⨾ Γ₂)
+≅₄-⨾-cong-right Γ≅ = ≅₄-cong (_ ⨾ʳ ⟪⟫) Γ≅
+
+≅₄-⨾-cong-left :  Γ₁ ≅₄ Γ₂ → (Γ₁ ⨾ Γ) ≅₄ (Γ₂ ⨾ Γ)
+≅₄-⨾-cong-left Γ≅ = ≅₄-cong (⟪⟫ ⨾ˡ _) Γ≅
+
+≅₄-∥-cong-right :  Γ₁ ≅₄ Γ₂ → (Γ ∥ Γ₁) ≅₄ (Γ ∥ Γ₂)
+≅₄-∥-cong-right Γ≅ = ≅₄-cong (_ ∥ʳ ⟪⟫) Γ≅
+
+≅₄-∥-cong-left  :  Γ₁ ≅₄ Γ₂ → (Γ₁ ∥ Γ) ≅₄ (Γ₂ ∥ Γ)
+≅₄-∥-cong-left Γ≅ = ≅₄-cong (⟪⟫ ∥ˡ _) Γ≅
+
+≅₄-∅-unit-∥-left : (∅ ∥ Γ) ≅₄ Γ
+≅₄-∅-unit-∥-left = ≅₄←≅₁ ≅₁-∅-unit-∥-left
+
+≅₄-∅-unit-∥-right : (Γ ∥ ∅) ≅₄ Γ
+≅₄-∅-unit-∥-right = ≅₄-trans ≅₄-∥-comm ≅₄-∅-unit-∥-left
 
 module Equivalence where
   infix 10 _≅_
@@ -264,12 +287,12 @@ module Equivalence where
   ∅-unit-∥-right = ≅-trans ∥-comm ∅-unit-∥-left
 
   ≅₁-sound : Γ₁ ≅₁ Γ₂ → Γ₁ ≅ Γ₂
-  ≅₁-sound ≅-∅-unit-⨾-left = ∅-unit-⨾-left
-  ≅₁-sound ≅-∅-unit-⨾-right = ∅-unit-⨾-right
-  ≅₁-sound ≅-∅-unit-∥-left = ∅-unit-∥-left
-  ≅₁-sound ≅-⨾-assoc = ⨾-assoc
-  ≅₁-sound ≅-∥-assoc = ∥-assoc
-  ≅₁-sound ≅-∥-comm = ∥-comm
+  ≅₁-sound ≅₁-∅-unit-⨾-left = ∅-unit-⨾-left
+  ≅₁-sound ≅₁-∅-unit-⨾-right = ∅-unit-⨾-right
+  ≅₁-sound ≅₁-∅-unit-∥-left = ∅-unit-∥-left
+  ≅₁-sound ≅₁-⨾-assoc = ⨾-assoc
+  ≅₁-sound ≅₁-∥-assoc = ∥-assoc
+  ≅₁-sound ≅₁-∥-comm = ∥-comm
 
 
   ≅₂-sound : Γ₁ ≅₂ Γ₂ → Γ₁ ≅ Γ₂
@@ -297,88 +320,35 @@ module Equivalence where
   ≅₄-complete ≅-refl = ≅-refl
   ≅₄-complete (≅-sym Γ≅) = ≅₄-sym (≅₄-complete Γ≅)
   ≅₄-complete (≅-trans Γ≅ Γ≅₁) = ≅₄-trans (≅₄-complete Γ≅) (≅₄-complete Γ≅₁)
-  ≅₄-complete ∅-unit-⨾-left = ≅₄←≅₁ ≅-∅-unit-⨾-left
-  ≅₄-complete ∅-unit-⨾-right = ≅₄←≅₁ ≅-∅-unit-⨾-right
-  ≅₄-complete ∅-unit-∥-left = ≅₄←≅₁ ≅-∅-unit-∥-left
-  ≅₄-complete ⨾-assoc = ≅₄←≅₁ ≅-⨾-assoc
-  ≅₄-complete ∥-assoc = ≅₄←≅₁ ≅-∥-assoc
-  ≅₄-complete ∥-comm = ≅₄←≅₁ ≅-∥-comm
+  ≅₄-complete ∅-unit-⨾-left = ≅₄←≅₁ ≅₁-∅-unit-⨾-left
+  ≅₄-complete ∅-unit-⨾-right = ≅₄←≅₁ ≅₁-∅-unit-⨾-right
+  ≅₄-complete ∅-unit-∥-left = ≅₄←≅₁ ≅₁-∅-unit-∥-left
+  ≅₄-complete ⨾-assoc = ≅₄←≅₁ ≅₁-⨾-assoc
+  ≅₄-complete ∥-assoc = ≅₄←≅₁ ≅₁-∥-assoc
+  ≅₄-complete ∥-comm = ≅₄←≅₁ ≅₁-∥-comm
   ≅₄-complete (⨾-cong-left Γ≅) = ≅₄-cong (⟪⟫ ⨾ˡ _) (≅₄-complete Γ≅)
   ≅₄-complete (⨾-cong-right Γ≅) = ≅₄-cong (_ ⨾ʳ ⟪⟫) (≅₄-complete Γ≅)
   ≅₄-complete (∥-cong-left Γ≅) = ≅₄-cong (⟪⟫ ∥ˡ _) (≅₄-complete Γ≅)
 
 
-open Equivalence public
-
+-- open Equivalence public
+_≅_ = _≅₄_
+≅-sym = ≅₄-sym
+≅-trans = ≅₄-trans
+≅-∥-cong-right = ≅₄-∥-cong-right
+≅-∥-cong-left = ≅₄-∥-cong-left
+≅-⨾-cong-right = ≅₄-⨾-cong-right
+≅-⨾-cong-left = ≅₄-⨾-cong-left
+≅-∅-unit-∥-left = ≅₄-∅-unit-∥-left
+≅-∅-unit-∥-right = ≅₄-∅-unit-∥-right
+≅-∥-comm = ≅₄-∥-comm
+≅-∥-assoc = ≅₄-∥-assoc
 
 ≅-ctx-extend :  ∀ d → Γ₁ ≅ Γ₂ → ctx-extend d Γ₁ T ≅ ctx-extend d Γ₂ T
-≅-ctx-extend Left Γ₁≅Γ₂ = ⨾-cong-right Γ₁≅Γ₂
-≅-ctx-extend Right Γ₁≅Γ₂ = ⨾-cong-left Γ₁≅Γ₂
-≅-ctx-extend Unord Γ₁≅Γ₂ = ∥-cong-right Γ₁≅Γ₂
+≅-ctx-extend Left Γ₁≅Γ₂ = ≅-⨾-cong-right Γ₁≅Γ₂
+≅-ctx-extend Right Γ₁≅Γ₂ = ≅-⨾-cong-left Γ₁≅Γ₂
+≅-ctx-extend Unord Γ₁≅Γ₂ = ≅-∥-cong-right Γ₁≅Γ₂
 
-⨾-normalize-r : Context → Context → Context
-⨾-normalize-r Γ₁ ∅ = Γ₁
-⨾-normalize-r Γ₁ Γ₂ = Γ₁ ⨾ Γ₂
-
-⨾-normalize : Context → Context → Context
-⨾-normalize ∅ Γ₂ = Γ₂
-⨾-normalize $[ T ] Γ₂ = ⨾-normalize-r $[ T ] Γ₂
-⨾-normalize (Γ₁ ⨾ Γ₃) Γ₂ = Γ₁ ⨾ ⨾-normalize Γ₃ Γ₂
-⨾-normalize Γ@(Γ₁ ∥ Γ₃) Γ₂ = ⨾-normalize-r Γ Γ₂ 
-
-⨾-normalize-∅ : ⨾-normalize Γ ∅ ≡ Γ
-⨾-normalize-∅ {∅} = refl
-⨾-normalize-∅ {$[ x ]} = refl
-⨾-normalize-∅ {Γ ⨾ Γ₁} = cong (Γ ⨾_) ⨾-normalize-∅
-⨾-normalize-∅ {Γ ∥ Γ₁} = refl
-
-∥-normalize-r : Context → Context → Context
-∥-normalize-r Γ₁ ∅ = Γ₁
-∥-normalize-r Γ₁ Γ₂ = Γ₁ ∥ Γ₂
-
-∥-normalize : Context → Context → Context
-∥-normalize ∅ Γ₂ = Γ₂
-∥-normalize $[ T ] Γ₂ = ∥-normalize-r $[ T ] Γ₂
-∥-normalize Γ@(Γ₁ ⨾ Γ₃) Γ₂ = ∥-normalize-r Γ Γ₂
-∥-normalize (Γ₁ ∥ Γ₃) Γ₂ = Γ₁ ∥ ∥-normalize Γ₃ Γ₂
-
-≅-normalize : Context → Context
-≅-normalize ∅ = ∅
-≅-normalize $[ T ] = $[ T ]
-≅-normalize (Γ₁ ⨾ Γ₂) = ⨾-normalize (≅-normalize Γ₁) (≅-normalize Γ₂)
-≅-normalize (Γ₁ ∥ Γ₂) = ∥-normalize (≅-normalize Γ₁) (≅-normalize Γ₂)
-
-⨾-normalize-r-sound : ⨾-normalize-r Γ₁ Γ₂ ≅ (Γ₁ ⨾ Γ₂)
-⨾-normalize-r-sound {Γ₁} {∅} = ≅-sym ∅-unit-⨾-right
-⨾-normalize-r-sound {Γ₁} {$[ x ]} = ≅-refl
-⨾-normalize-r-sound {Γ₁} {Γ₂ ⨾ Γ₃} = ≅-refl
-⨾-normalize-r-sound {Γ₁} {Γ₂ ∥ Γ₃} = ≅-refl
-
-⨾-normalize-sound : ⨾-normalize Γ₁ Γ₂ ≅ (Γ₁ ⨾ Γ₂)
-⨾-normalize-sound {∅} {Γ₂} = ≅-sym ∅-unit-⨾-left
-⨾-normalize-sound {$[ x ]} {Γ₂} = ⨾-normalize-r-sound
-⨾-normalize-sound {Γ₁ ⨾ Γ₃} {Γ₂} = ≅-trans
-                                     (⨾-cong-right {Γ₁ = ⨾-normalize Γ₃ Γ₂} {Γ₂ = Γ₃ ⨾ Γ₂} {Γ₃ = Γ₁} ⨾-normalize-sound)
-                                     (≅-sym ⨾-assoc)
-⨾-normalize-sound {Γ₁ ∥ Γ₃} {Γ₂} = ⨾-normalize-r-sound
-
-∥-normalize-r-sound : ∥-normalize-r Γ₁ Γ₂ ≅ (Γ₁ ∥ Γ₂)
-∥-normalize-r-sound {Γ₁} {∅} = ≅-sym ∅-unit-∥-right
-∥-normalize-r-sound {Γ₁} {$[ x ]} = ≅-refl
-∥-normalize-r-sound {Γ₁} {Γ₂ ⨾ Γ₃} = ≅-refl
-∥-normalize-r-sound {Γ₁} {Γ₂ ∥ Γ₃} = ≅-refl
-
-∥-normalize-sound : ∥-normalize Γ₁ Γ₂ ≅ (Γ₁ ∥ Γ₂)
-∥-normalize-sound {∅} {Γ₂} = ≅-sym ∅-unit-∥-left
-∥-normalize-sound {$[ x ]} {Γ₂} = ∥-normalize-r-sound
-∥-normalize-sound {Γ₁ ⨾ Γ₃} {Γ₂} = ∥-normalize-r-sound
-∥-normalize-sound {Γ₁ ∥ Γ₃} {Γ₂} = ≅-trans (∥-cong-right ∥-normalize-sound) (≅-sym ∥-assoc)
-
-≅-normalize-sound : ≅-normalize Γ ≅ Γ
-≅-normalize-sound {∅} = ≅-refl
-≅-normalize-sound {$[ T ]} = ≅-refl
-≅-normalize-sound {Γ₁ ⨾ Γ₂} = ≅-trans ⨾-normalize-sound (≅-trans (⨾-cong-right ≅-normalize-sound) (⨾-cong-left ≅-normalize-sound))
-≅-normalize-sound {Γ₁ ∥ Γ₂} = ≅-trans ∥-normalize-sound (≅-trans (∥-cong-right ≅-normalize-sound) (∥-cong-left ≅-normalize-sound))
 
 data _≼_ : Context → Context → Set where
   ≼-≅ : Γ₁ ≅ Γ₂ → Γ₁ ≼ Γ₂
@@ -412,9 +382,10 @@ data eff-split : Dir → Eff → Eff → Set where
 
 
 data Expr : Context → Type → Eff → Set where
-  var  : Γ ≡ $[ T ] → Expr Γ T Pure
-  -- var' : is-null-pattern 𝓖 → Expr (𝓖 ↓ $[ T ]) T Pure
-  lam  : (d : Dir) → Expr (ctx-extend d Γ T₁) T₂ ε → Expr Γ (T₁ ⇒[ d , ε ] T₂) Pure
+  var  : Γ ≡ $[ T ]
+    → Expr Γ T Pure
+  lam  : (d : Dir) → Expr (ctx-extend d Γ T₁) T₂ ε
+    → Expr Γ (T₁ ⇒[ d , ε ] T₂) Pure
   app  : (d : Dir) → ctx-split d Γ₁ Γ₂ Γ → eff-split d ε₁ ε₂
        → Expr Γ₁ (T₂ ⇒[ d , ε ] T₁) ε₁ → Expr Γ₂ T₂ ε₂
        → Expr Γ T₁ (ε₁ ⊔ ε₂ ⊔ ε)
@@ -431,13 +402,14 @@ data Expr : Context → Type → Eff → Set where
        → Expr Γ (T₁ ⊗[ d ] T₂) (ε₁ ⊔ ε₂)
   case-⊗ : (d : Dir) → Expr Γ (T₁ ⊗[ d ] T₂) ε₁ →  Expr (𝓖 ↓ ctx-extend d ($[ T₁ ]) T₂) T ε₂ → (ε₁ ≡ Impure → is-left-pattern 𝓖)
         → Γ′ ≡ (𝓖 ↓ Γ)
-         → Expr Γ′ T (ε₁ ⊔ ε₂)
+        → Expr Γ′ T (ε₁ ⊔ ε₂)
   inj   : ∀{f : Fin n → Type} → (i : Fin n) → Expr Γ (f i) ε
         → Expr Γ (ΣΣ f) ε
   case-ΣΣ : ∀{f : Fin n → Type} → Expr Γ (ΣΣ f) ε₁ → ((i : Fin n) → Expr (𝓖 ↓ $[ f i ]) T ε₂) → (ε₁ ≡ Impure → is-left-pattern 𝓖)
         → Γ′ ≡ (𝓖 ↓ Γ)
         → Expr Γ′ T (ε₁ ⊔ ε₂)
-  sub-ctx : Γ₂ ≼ Γ₁ → ε₁ ⊑ ε₂ → Expr Γ₁ T ε₁ → Expr Γ₂ T ε₂
+  sub-ctx : Γ₂ ≼ Γ₁ → ε₁ ⊑ ε₂ → Expr Γ₁ T ε₁
+    → Expr Γ₂ T ε₂
 
 -- processes
 
@@ -463,23 +435,23 @@ variable P P₁ P₂ P₃ : Proc Γ
 p-conv : Γ₁ ≅ Γ₂ → Proc Γ₁ → Proc Γ₂
 p-conv Γ₁≅Γ₂ ⟨ M ⟩ = ⟨ (sub-ctx (≼-≅ (≅-sym Γ₁≅Γ₂)) ⊑-refl M) ⟩
 p-conv Γ₁≅Γ₂ (mix Γ≅ P₁ P₂) = mix (≅-trans Γ≅ Γ₁≅Γ₂) P₁ P₂
-p-conv Γ₁≅Γ₂ (ν b₁ b₂ S Sb₁ Sb₂ P) = ν b₁ b₂ S Sb₁ Sb₂ (p-conv (∥-cong-right Γ₁≅Γ₂) P)
+p-conv Γ₁≅Γ₂ (ν b₁ b₂ S Sb₁ Sb₂ P) = ν b₁ b₂ S Sb₁ Sb₂ (p-conv (≅-∥-cong-right Γ₁≅Γ₂) P)
 
 -- congruence
 -- Q: is it too specific to ask for ∅-unit-∥-left in ≣-unit-left and ≣-unit-right?
 -- Q: -""- for ≅-refl in ≣-assoc
 
 data _≣_ : Proc Γ → Proc Γ → Set where
-  ≣-unit-left : mix ∅-unit-∥-left ⟨ unit ⟩ P ≣ P
-  ≣-unit-right : mix ∅-unit-∥-right P ⟨ unit ⟩ ≣ P
-  ≣-comm : ∀ (Γ≅Γ′ : (Γ₁ ∥ Γ₂) ≅ Γ) → mix Γ≅Γ′ P₁ P₂ ≣ mix (≅-trans ∥-comm Γ≅Γ′) P₂ P₁
-  ≣-assoc : mix ≅-refl P₁ (mix ≅-refl P₂ P₃) ≣ mix ∥-assoc (mix ≅-refl P₁ P₂) P₃
+  ≣-unit-left : mix ≅-∅-unit-∥-left ⟨ unit ⟩ P ≣ P
+  ≣-unit-right : mix ≅-∅-unit-∥-right P ⟨ unit ⟩ ≣ P
+  ≣-comm : ∀ (Γ≅Γ′ : (Γ₁ ∥ Γ₂) ≅ Γ) → mix Γ≅Γ′ P₁ P₂ ≣ mix (≅-trans ≅-∥-comm Γ≅Γ′) P₂ P₁
+  ≣-assoc : mix ≅-refl P₁ (mix ≅-refl P₂ P₃) ≣ mix ≅-∥-assoc (mix ≅-refl P₁ P₂) P₃
   ≣-swap : ∀ {Sb₁ : S ⊢ b₁ ↝ Γ₁} {Sb₂ : dual S ⊢ b₂ ↝ Γ₂}
     → ν{Γ = Γ} b₁ b₂ S Sb₁ Sb₂ P
-    ≣ ν{Γ = Γ} b₂ b₁ (dual S) Sb₂ (subst (_⊢ b₁ ↝ Γ₁) (dual-involutive S) Sb₁) (p-conv (∥-cong-left ∥-comm) P)
+    ≣ ν{Γ = Γ} b₂ b₁ (dual S) Sb₂ (subst (_⊢ b₁ ↝ Γ₁) (dual-involutive S) Sb₁) (p-conv (≅-∥-cong-left ≅-∥-comm) P)
   ≣-extend : ∀ {P₃ : Proc Γ₃}{Sb₁ : S ⊢ b₁ ↝ Γ₁} {Sb₂ : dual S ⊢ b₂ ↝ Γ₂}
     → mix ≅-refl P₃ (ν{Γ = Γ} b₁ b₂ S Sb₁ Sb₂ P)
-    ≣ ν{Γ = (Γ₃ ∥ Γ)} b₁ b₂ S Sb₁ Sb₂ (mix (≅-trans (≅-sym ∥-assoc) (≅-trans (∥-cong-left ∥-comm) ∥-assoc)) P₃ P)
+    ≣ ν{Γ = (Γ₃ ∥ Γ)} b₁ b₂ S Sb₁ Sb₂ (mix (≅-trans (≅-sym ≅-∥-assoc) (≅-trans (≅-∥-cong-left ≅-∥-comm) ≅-∥-assoc)) P₃ P)
   ≣-res-comm : ∀{Sb₁ : S₁ ⊢ b₁ ↝ Γ₁} {Sb₂ : dual S₁ ⊢ b₂ ↝ Γ₂}{Sb₃ : S₂ ⊢ b₃ ↝ Γ₃} {Sb₄ : dual S₂ ⊢ b₄ ↝ Γ₄} →
     (ν b₁ b₂ S₁ Sb₁ Sb₂ (ν b₃ b₄ S₂ Sb₃ Sb₄ P))
-    ≣ ν b₃ b₄ S₂ Sb₃ Sb₄ (ν b₁ b₂ S₁ Sb₁ Sb₂ (p-conv (≅-trans (≅-sym ∥-assoc) (≅-trans (∥-cong-left ∥-comm) ∥-assoc)) P))
+    ≣ ν b₃ b₄ S₂ Sb₃ Sb₄ (ν b₁ b₂ S₁ Sb₁ Sb₂ (p-conv (≅-trans (≅-sym ≅-∥-assoc) (≅-trans (≅-∥-cong-left ≅-∥-comm) ≅-∥-assoc)) P))

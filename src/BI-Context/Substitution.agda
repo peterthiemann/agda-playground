@@ -34,17 +34,21 @@ ren ρ (sub-ctx x x₁ M) = {!!}
 ≅-↓ : Γ₁ ≅ Γ₂ → Γ₁ ≡ (𝓖 ↓ Γ) → ∃[ 𝓖′ ] ∃[ Γ′ ] Γ₂ ≡ 𝓖′ ↓ Γ′ × 𝓖 ↓ ∅ ≅ 𝓖′ ↓ ∅ × Γ ≅ Γ′
 ≅-↓ Γ₁≅Γ₂ = {!!}
 
-≅-singleton-trans-≡ : $[ T₁ ] ≅ Γ → Γ ≅ $[ T₂ ] → T₁ ≡ T₂
+≅₃-singleton-↓ : 𝓖 ↓ $[ T ] ≅₃ Γ → is-null-pattern 𝓖 → ∃[ 𝓖′ ] is-null-pattern 𝓖′ × Γ ≡ 𝓖′ ↓ $[ T ]
+≅₃-singleton-↓ {⟪⟫} Γ≅ 𝓖0 = {!!}
+≅₃-singleton-↓ {𝓖 ⨾ˡ Γ} Γ≅ 𝓖0 = {!!}
+≅₃-singleton-↓ {Γ ⨾ʳ 𝓖} Γ≅ 𝓖0 = {!!}
+≅₃-singleton-↓ {𝓖 ∥ˡ Γ} Γ≅ 𝓖0 = {!!}
+≅₃-singleton-↓ {Γ ∥ʳ 𝓖} Γ≅ 𝓖0 = {!!}
+
+≅-singleton-↓ : 𝓖 ↓ $[ T ] ≅ Γ → is-null-pattern 𝓖 → ∃[ 𝓖′ ] is-null-pattern 𝓖′ × Γ ≡ 𝓖′ ↓ $[ T ]
+≅-singleton-↓ {𝓖} ≅-refl 𝓖0 = 𝓖 , 𝓖0 , refl
+≅-singleton-↓ (≅-step eqv₃ Γ≅) 𝓖0
+  with 𝓖₁ , 𝓖₁0 , refl ← ≅₃-singleton-↓ eqv₃ 𝓖0 = ≅-singleton-↓ Γ≅ 𝓖₁0
+
 ≅-singleton-≡ : $[ T₁ ] ≅ $[ T₂ ] → T₁ ≡ T₂
-
-≅-singleton-trans-≡ {Γ = ∅} $≅ ≅$ = {!$≅!}
-≅-singleton-trans-≡ {Γ = $[ T ]} $≅ ≅$ = {!!}
-≅-singleton-trans-≡ {Γ = Γ ⨾ Γ₁} $≅ ≅$ = {!!}
-≅-singleton-trans-≡ {Γ = Γ ∥ Γ₁} $≅ ≅$ = {!!}
-
 ≅-singleton-≡ ≅-refl = refl
-≅-singleton-≡ (≅-sym ≅s) = sym (≅-singleton-≡ ≅s)
-≅-singleton-≡ (≅-trans ≅s ≅s₁) = ≅-singleton-trans-≡  ≅s ≅s₁
+≅-singleton-≡ (≅-step x eqv) = {!!}
 
 
 
@@ -114,8 +118,13 @@ sub {𝓖 = 𝓖} {T₁} {Γ} eq (app d ctx-split-right eff-split-right L M) V
 sub {𝓖 = ⟪⟫} {T₁} {Γ} () unit V
 sub {𝓖 = 𝓖} {T₁} {Γ} eq ((L ⨾ M) cond gg) V = {!!}
 sub {𝓖 = 𝓖} {T₁} {Γ} eq (let1 L M cond gg) V = {!!}
-sub {𝓖 = 𝓖} {T₁} {Γ} eq (prod d cs es L M) V = {!!}
-sub {𝓖 = 𝓖} {T₁} {Γ} eq (case-⊗ d L M cond gg) V = {!!}
-sub {𝓖 = 𝓖} {T₁} {Γ} eq (inj i M) V = {!!}
+sub {𝓖 = 𝓖 ∥ˡ Γ₁} {T₁} {Γ} eq (prod d ctx-split-unord eff-split-unord L M) V with refl ← eq = prod d ctx-split-unord eff-split-unord (sub refl L V) M
+sub {𝓖 = Γ₁ ∥ʳ 𝓖} {T₁} {Γ} eq (prod d ctx-split-unord eff-split-unord L M) V with refl ← eq = prod d ctx-split-unord eff-split-unord L (sub refl M V)
+sub {𝓖 = 𝓖 ⨾ˡ Γ₁} {T₁} {Γ} eq (prod d ctx-split-left eff-split-left L M) V with refl ← eq = prod d ctx-split-left eff-split-left L (sub refl M V)
+sub {𝓖 = Γ₁ ⨾ʳ 𝓖} {T₁} {Γ} eq (prod d ctx-split-left eff-split-left L M) V with refl ← eq = prod d ctx-split-left eff-split-left (sub refl L V) M
+sub {𝓖 = 𝓖 ⨾ˡ Γ₁} {T₁} {Γ} eq (prod d ctx-split-right eff-split-right L M) V with refl ← eq = prod d ctx-split-right eff-split-right (sub refl L V) M
+sub {𝓖 = Γ₁ ⨾ʳ 𝓖} {T₁} {Γ} eq (prod d ctx-split-right eff-split-right L M) V with refl ← eq = prod d ctx-split-right eff-split-right L (sub refl M V)
+sub {𝓖 = 𝓖} {T₁} {Γ} eq (case-⊗ d L M cond gg) V = {!𝓖!}
+sub {𝓖 = 𝓖} {T₁} {Γ} eq (inj i M) V with refl ← eq = inj i (sub refl M V)
 sub {𝓖 = 𝓖} {T₁} {Γ} eq (case-ΣΣ M x cond gg) V = {!!}
-sub {𝓖 = 𝓖} {T₁} {Γ} eq (sub-ctx x x₁ M) V = {!!}
+sub {𝓖 = 𝓖} {T₁} {Γ} eq (sub-ctx Γ₁≼Γ₂ ε₁⊑ε₂ M) V with refl ← eq = let r = sub {!!} M V in sub-ctx {!!} ε₁⊑ε₂ {!!}
