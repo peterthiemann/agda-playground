@@ -96,6 +96,70 @@ ctx-pat-extend Left = refl
 ctx-pat-extend Right = refl
 ctx-pat-extend Unord = refl
 
+pat-split : 𝓖′ ↓ $[ T ] ≡ 𝓖 ↓ Γ → ∃[ 𝓖₁ ] Γ ≡ 𝓖₁ ↓ $[ T ] × 𝓖′ ≡ pat-∘ 𝓖 𝓖₁
+                                ⊎ ∃[ 𝓖₂ ] 𝓖 ↓ ∅ ≡ 𝓖₂ ↓ $[ T ]
+pat-split = {!!}
+
+⨾-injective : Γ₁ ⨾ Γ₂ ≡ Γ₃ ⨾ Γ₄ → Γ₁ ≡ Γ₃ × Γ₂ ≡ Γ₄
+⨾-injective refl = refl , refl
+
+∥-injective : Γ₁ ∥ Γ₂ ≡ Γ₃ ∥ Γ₄ → Γ₁ ≡ Γ₃ × Γ₂ ≡ Γ₄
+∥-injective refl = refl , refl
+
+pat-split' : ∀ Γ′ → 𝓖′ ↓ Γ′ ≡ 𝓖 ↓ Γ → ∃[ 𝓖₁ ] Γ ≡ 𝓖₁ ↓ Γ′ × 𝓖′ ≡ pat-∘ 𝓖 𝓖₁
+                                    ⊎ ∃[ 𝓖₂ ] 𝓖 ↓ ∅ ≡ 𝓖₂ ↓ Γ′
+                                    ⊎ Γ′ ≡ 𝓖 ↓ Γ
+pat-split' {⟪⟫} {𝓖} Γ′ eq = inj₂ (inj₂ eq)
+pat-split' {𝓖′} {⟪⟫} Γ′ eq = inj₁ (𝓖′ , sym eq , refl)
+pat-split' {𝓖′ ⨾ˡ Γ} {𝓖 ⨾ˡ Γ₁} Γ′ eq
+  with eq1 , refl ← ⨾-injective eq
+  with pat-split'{𝓖′}{𝓖} Γ′ eq1
+... | inj₁ (𝓖₁ , iheq1 , iheq2) = inj₁ (𝓖₁ , (iheq1 , cong₂ _⨾ˡ_ iheq2 refl))
+... | inj₂ (inj₁ (𝓖₂ , iheq)) = inj₂ (inj₁ (𝓖₂ ⨾ˡ Γ , cong₂ _⨾_ iheq refl))
+... | inj₂ (inj₂ y) = {!!}
+pat-split' {𝓖′ ⨾ˡ Γ} {Γ₁ ⨾ʳ 𝓖} Γ′ eq = {!!}
+pat-split' {Γ ⨾ʳ 𝓖′} {𝓖} Γ′ eq = {!!}
+pat-split' {𝓖′ ∥ˡ Γ} {𝓖} Γ′ eq = {!!}
+pat-split' {Γ ∥ʳ 𝓖′} {𝓖} Γ′ eq = {!!}
+
+pat-split'' : ∀ 𝓖 𝓖′ {Γ}{Γ′} → 𝓖 ↓ Γ ≡ 𝓖′ ↓ Γ′
+  → ∃[ 𝓖₁ ] Γ′ ≡ 𝓖₁ ↓ Γ × 𝓖 ≡ pat-∘ 𝓖′ 𝓖₁
+  ⊎ ∃[ 𝓖₂ ] Γ ≡ 𝓖₂ ↓ Γ′ × 𝓖′ ≡ pat-∘ 𝓖 𝓖₂
+  ⊎ {!!}
+pat-split'' 𝓖 ⟪⟫ eq = inj₁ (𝓖 , sym eq , refl)
+pat-split'' ⟪⟫ 𝓖′ eq = inj₂ (inj₁ (𝓖′ , eq , refl))
+pat-split'' (𝓖 ⨾ˡ Γ) (𝓖′ ⨾ˡ Γ′) eq
+  with eq1 , refl ← ⨾-injective eq
+  with pat-split'' 𝓖 𝓖′ eq1
+... | inj₁ (𝓖₁ , iheq1 , iheq2) = inj₁ (𝓖₁ , iheq1 , (cong₂ _⨾ˡ_ iheq2 refl))
+... | inj₂ (inj₁ (𝓖₁ , iheq1 , iheq2)) = inj₂ (inj₁ (𝓖₁ , iheq1 , cong₂ _⨾ˡ_ iheq2 refl))
+... | inj₂ (inj₂ y) = {!!}
+pat-split'' (𝓖 ⨾ˡ Γ) (Γ′ ⨾ʳ 𝓖′) eq
+  with eq1 , refl ← ⨾-injective eq
+  = {!!}
+pat-split'' (Γ ⨾ʳ 𝓖) (𝓖′ ⨾ˡ Γ₁) eq = {!!}
+pat-split'' (Γ ⨾ʳ 𝓖) (Γ₁ ⨾ʳ 𝓖′) eq
+  with refl , eq1 ← ⨾-injective eq
+  with pat-split'' 𝓖 𝓖′ eq1
+... | inj₁ (𝓖₁ , iheq1 , iheq2) = inj₁ (𝓖₁ , iheq1 , cong₂ _⨾ʳ_ refl iheq2)
+... | inj₂ (inj₁ (𝓖₁ , iheq1 , iheq2)) = inj₂ (inj₁ (𝓖₁ , iheq1 , cong₂ _⨾ʳ_ refl iheq2))
+... | inj₂ (inj₂ y) = {!!}
+pat-split'' (𝓖 ∥ˡ Γ) (𝓖′ ∥ˡ Γ₁) eq
+  with eq1 , refl ← ∥-injective eq
+  with pat-split'' 𝓖 𝓖′ eq1
+... | inj₁ (𝓖₁ , iheq1 , iheq2) = inj₁ (𝓖₁ , iheq1 , (cong₂ _∥ˡ_ iheq2 refl))
+... | inj₂ (inj₁ (𝓖₁ , iheq1 , iheq2)) = inj₂ (inj₁ (𝓖₁ , iheq1 , cong₂ _∥ˡ_ iheq2 refl))
+... | inj₂ (inj₂ y) = {!!}
+pat-split'' (𝓖 ∥ˡ Γ) (Γ₁ ∥ʳ 𝓖′) eq = {!!}
+pat-split'' (Γ ∥ʳ 𝓖) (𝓖′ ∥ˡ Γ₁) eq = {!!}
+pat-split'' (Γ ∥ʳ 𝓖) (Γ₁ ∥ʳ 𝓖′) eq
+  with refl , eq1 ← ∥-injective eq
+  with pat-split'' 𝓖 𝓖′ eq1
+... | inj₁ (𝓖₁ , iheq1 , iheq2) = inj₁ (𝓖₁ , iheq1 , cong₂ _∥ʳ_ refl iheq2)
+... | inj₂ (inj₁ (𝓖₁ , iheq1 , iheq2)) = inj₂ (inj₁ (𝓖₁ , iheq1 , cong₂ _∥ʳ_ refl iheq2))
+... | inj₂ (inj₂ y) = {!!}
+
+---- substitution (maybe renaming is not needed)
 
 sub : (𝓖 ↓ $[ T₁ ]) ≡ Γ → Expr Γ T ε → Expr Γ₁ T₁ Pure → Expr (𝓖 ↓ Γ₁) T ε
 sub {𝓖 = ⟪⟫} {T₁} refl (var refl) V = V
@@ -116,7 +180,10 @@ sub {𝓖 = 𝓖} {T₁} {Γ} eq (app d ctx-split-right eff-split-right L M) V
 ... | 𝓖′ ⨾ˡ Γ with refl ← eq = app d ctx-split-right eff-split-right (sub refl L V) M
 ... | Γ ⨾ʳ 𝓖′ with refl ← eq = app d ctx-split-right eff-split-right L (sub refl M V)
 sub {𝓖 = ⟪⟫} {T₁} {Γ} () unit V
-sub {𝓖 = 𝓖} {T₁} {Γ} eq ((L ⨾ M) cond gg) V = {!!}
+sub {𝓖 = 𝓖′} {T₁} {Γ} eq (_⨾_ {𝓖 = 𝓖} L M cond gg) V with refl ← eq
+  with pat-split{𝓖′ = 𝓖′}{𝓖 = 𝓖} gg in eq
+... | inj₁ (𝓖₁ , refl , refl) = (sub refl L V ⨾ M) cond (sym (pat-∘-↓{𝓖}{𝓖₁}))
+... | inj₂ (𝓖₂ , eq2) = (L ⨾ (sub {!!} M V)) {!!} {!!}
 sub {𝓖 = 𝓖} {T₁} {Γ} eq (let1 L M cond gg) V = {!!}
 sub {𝓖 = 𝓖 ∥ˡ Γ₁} {T₁} {Γ} eq (prod d ctx-split-unord eff-split-unord L M) V with refl ← eq = prod d ctx-split-unord eff-split-unord (sub refl L V) M
 sub {𝓖 = Γ₁ ∥ʳ 𝓖} {T₁} {Γ} eq (prod d ctx-split-unord eff-split-unord L M) V with refl ← eq = prod d ctx-split-unord eff-split-unord L (sub refl M V)
