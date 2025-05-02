@@ -151,7 +151,7 @@ is-null-pattern (𝓖 ∥ˡ Γ) = is-null-pattern 𝓖 × is-null-context Γ
 
 variable
   Γ Γ₁ Γ₂ Γ₃ Γ₄ Γ′ : Context
-  𝓖 𝓖₁ 𝓖₂ 𝓖′ : Pattern
+  𝓖 𝓖₁ 𝓖₂ 𝓖₃ 𝓖′ : Pattern
 
 -- ctx-pattern-fill
 
