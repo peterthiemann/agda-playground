@@ -1,5 +1,6 @@
 module StackBasedBigStep where
 
+open import Data.Empty using (⊥; ⊥-elim)
 open import Data.String using (String; _≟_)
 open import Data.List using (List; []; _∷_; [_]; _++_; length; lookup)
 open import Data.Bool using (Bool; true; false)
@@ -7,9 +8,10 @@ open import Data.Nat using (ℕ; zero; suc; _+_)
 open import Data.Maybe using (Maybe; nothing; just)
 open import Data.Product using (_×_; _,_ ; proj₁ ; proj₂)
 open import Function using (case_of_)
+open import Relation.Nullary using (¬_)
 open import Relation.Nullary.Decidable using (Dec; yes; no)
 import Relation.Binary.PropositionalEquality as Eq
-open Eq using (_≡_; refl)
+open Eq using (_≡_; refl; cong)
 
 Ident = String
 StackMap = Ident → Maybe ℕ
@@ -71,9 +73,17 @@ variable
 
 
 data _≤_ : Qual → Qual → Set where
-  ≤-bot  : 𝟙 ≤ q
-  ≤-top  : q ≤ 𝟚
+  ≤-bottop  : 𝟙 ≤ 𝟚
+  -- ≤-top  : q ≤ 𝟚
   ≤-refl : q ≤ q
+
+≤-trans : q₁ ≤ q₂ → q₂ ≤ q₃ → q₁ ≤ q₃
+≤-trans ≤-bottop ≤-refl = ≤-bottop
+≤-trans ≤-refl ≤-bottop = ≤-bottop
+≤-trans ≤-refl ≤-refl = ≤-refl
+
+¬2≤1 : ¬ (𝟚 ≤ 𝟙)
+¬2≤1 ()
 
 _⊔_ : Qual → Qual → Qual
 𝟙 ⊔ q₂ = q₂
@@ -87,13 +97,11 @@ _≤ᵇ_ : Qual → Qual → Bool
 ≤-sound : q₁ ≤ q₂ → q₁ ≤ᵇ q₂ ≡ true
 ≤-sound {𝟙} ≤-refl = refl
 ≤-sound {𝟚} ≤-refl = refl
-≤-sound ≤-bot = refl
-≤-sound {𝟙} ≤-top = refl
-≤-sound {𝟚} ≤-top = refl
+≤-sound ≤-bottop = refl
 
 ≤-complete : q₁ ≤ᵇ q₂ ≡ true → q₁ ≤ q₂
-≤-complete {𝟙} {𝟙} ≤b = ≤-bot
-≤-complete {𝟙} {𝟚} ≤b = ≤-top
+≤-complete {𝟙} {𝟙} ≤b = ≤-refl
+≤-complete {𝟙} {𝟚} ≤b = ≤-bottop
 ≤-complete {𝟚} {𝟚} ≤b = ≤-refl
 
 -- typing
@@ -108,6 +116,13 @@ data Type where
   Fun  : (S₁ : QType) → (S₂ : QType) → Type
   Ref  : (S : QType) → Type
 
+q-of : QType → Qual
+q-of (T ^ q) = q
+
+q-var : Var → Qual
+q-var (X s q) = q
+
+
 data Context : Set where
 
   ∅ : Context
@@ -118,17 +133,38 @@ variable
   T T₁ T₂ : Type
   S S′ S₁ S₂ S₃ S₄ : QType
 
+data wf : QType → Set where
+
+  wf-Unit : wf (Unit ^ q)
+  wf-Base : wf (Base ^ q)
+  wf-Fun  : wf S₁ → wf S₂ → wf (Fun S₁ S₂ ^ q)
+  wf-Ref  : wf S → q-of S ≤ q → wf (Ref S ^ q)
+
 data _∋_⦂_ : Context → Var → QType → Set where
 
-  here   : (Γ , s ⦂ S) ∋ (X s q) ⦂ S
+  here   : q-of S ≤ q → (Γ , s ⦂ S) ∋ (X s q) ⦂ S
   there  : Γ ∋ x ⦂ S → (Γ , s′ ⦂ S′) ∋ x ⦂ S
+
+q-var-type : Γ ∋ x ⦂ S → q-of S ≤ q-var x
+q-var-type (here x) = x
+q-var-type (there x∈) = q-var-type x∈
+
+
+-- lower bounds for qualifiers
+
+q-val : Val → Qual
+q-val unit = 𝟙
+q-val (clos _ _ _ _ q) = q
+q-val (cst x) = 𝟙
+q-val (ref q _) = q
+
+q-env : Env → Qual
+q-env ∅ = 𝟙
+q-env ⟨ s ≔ v , 𝓔 ⟩ = q-val v ⊔ q-env 𝓔
 
 q-bound : Context → Qual
 q-bound ∅ = 𝟙
 q-bound (Γ , _ ⦂ (_ ^ q)) = (q-bound Γ) ⊔ q
-
-q-of : QType → Qual
-q-of (T ^ q) = q
 
 q-bounded : Qual → Context → Context
 q-bounded q ∅ = ∅
@@ -137,20 +173,38 @@ q-bounded q (Γ , s ⦂ S)
 ... | false = q-bounded q Γ
 ... | true = q-bounded q Γ , s ⦂ S
 
+
+
 data _<⦂_ : QType → QType → Set where
 
   SRfl : q₁ ≤ q₂
     → (Unit ^ q₁) <⦂ (Unit ^ q₂)
 
+  SBase : q₁ ≤ q₂
+    → (Base ^ q₁) <⦂ (Base ^ q₂)
+
   SFun : q₁ ≤ q₂
     → S₃ <⦂ S₁
     → S₂ <⦂ S₄
-    → (Fun S₁ S₂ ^ q₃) <⦂ (Fun S₃ S₄ ^ q₄)
+    → (Fun S₁ S₂ ^ q₁) <⦂ (Fun S₃ S₄ ^ q₂)
 
-  SRef : q₁ ≤ q₂
+  SRef : 
+    q₁ ≤ q₂
     → S₁ <⦂ S₂
     → q-of S₂ ≤ q₂
     → (Ref S₁ ^ q₁) <⦂ (Ref S₂ ^ q₂)
+
+<⦂-refl : wf S → S <⦂ S
+<⦂-refl wf-Unit = SRfl ≤-refl
+<⦂-refl wf-Base = SBase ≤-refl
+<⦂-refl (wf-Fun wf₁ wf₂) = SFun ≤-refl (<⦂-refl wf₁) (<⦂-refl wf₂)
+<⦂-refl (wf-Ref wf₁ x) = SRef ≤-refl (<⦂-refl wf₁) x
+
+<⦂-trans : S₁ <⦂ S₂ → S₂ <⦂ S₃ → S₁ <⦂ S₃
+<⦂-trans (SRfl q1q2) (SRfl q2q3) = SRfl (≤-trans q1q2 q2q3)
+<⦂-trans (SBase q1q2) (SBase q2q3) = SBase (≤-trans q1q2 q2q3)
+<⦂-trans (SFun q1q2 S1S2 S1S3) (SFun q2q3 S2S3 S2S4) = SFun (≤-trans q1q2 q2q3) (<⦂-trans S2S3 S1S2) (<⦂-trans S1S3 S2S4)
+<⦂-trans (SRef q1q2 S1S2 x₁) (SRef q2q3 S2S3 x₂) = SRef (≤-trans q1q2 q2q3) (<⦂-trans S1S2 S2S3) x₂
 
 data _⊢_⦂_ : Context → Expr → QType → Set where
 
@@ -189,21 +243,96 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
     → S′ <⦂ S
     → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ q)
 
+--
+
+q-of-mono : S₁ <⦂ S₂ → q-of S₁ ≤ q-of S₂
+q-of-mono (SRfl q1≤q2) = q1≤q2
+q-of-mono (SBase q1≤q2) = q1≤q2
+q-of-mono (SFun q1≤q2 S1<S2 S1<S3) = q1≤q2
+q-of-mono (SRef q1≤q2 S1<S2 x₁) = q1≤q2
+
+
+-- heap & stack typing
+
+postulate _↓_ : Stack → Maybe ℕ → Val
+
+-- (H,∅)(x 1) = v
+data Access : Env → String → Val → Set where
+
+  here   : Access ⟨ s ≔ v , 𝓔 ⟩ s v
+  there  : Access 𝓔 s v → Access ⟨ s′ ≔ v′ , 𝓔 ⟩ s v
+
+data GenAccess : Env → Stack → StackMap → Var → Val → Set where
+
+  on-heap   : Access 𝓔 s v → GenAccess 𝓔 𝓢 σ (X s 𝟙) v
+  on-stack  : v ≡ 𝓢 ↓ σ s → GenAccess 𝓔 𝓢 σ (X s 𝟚) v
+
+data [_⦂_] : Val → QType → Set
+
+record _⊨_/_ (Γ : Context) (𝓔 : Env) (𝓢σ : Stack × StackMap) : Set where
+  inductive
+  field
+    ⊨-heap : ∀ {s}{T}{v} → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) →  Access 𝓔 s v → [ v ⦂ (T ^ 𝟙) ]
+    ⊨-stack : let 𝓢 , σ = 𝓢σ in ∀ {s}{T}{v}{q} → Γ ∋ X s 𝟚 ⦂ (T ^ q) → v ≡ (𝓢 ↓ σ s) → [ v ⦂ (T ^ q) ]
+open _⊨_/_
+
+rename-bounded : Γ′ ≡ q-bounded q Γ → Γ′ ∋ x ⦂ S → Γ ∋ x ⦂ S
+rename-bounded {q = q} {Γ = ∅} {S = S} refl ()
+rename-bounded {q = q} {Γ = Γ , s ⦂ S₁} {S = S} Γ′≡ x∈
+  with q-of S₁ ≤ᵇ q
+... | false = there (rename-bounded Γ′≡ x∈)
+rename-bounded {q = q} {Γ , s ⦂ S₁} {S = S} refl (here x) | true = here x
+rename-bounded {q = q} {Γ , s ⦂ S₁} {S = S} refl (there x∈) | true = there (rename-bounded refl x∈)
+
+restrict : Γ ⊨ 𝓔 / 𝓢σ → Γ′ ≡ q-bounded q Γ → Γ′ ⊨ 𝓔 / 𝓢σ
+restrict {𝓢σ = 𝓢 , σ} Γ⊨ refl = record { ⊨-heap = λ x∈ access → ⊨-heap Γ⊨ (rename-bounded refl x∈) access
+                                       ; ⊨-stack = λ x∈ v≡ → ⊨-stack Γ⊨ (rename-bounded refl x∈) v≡ }
+
+access-soundness : Γ ⊨ 𝓔 / 𝓢σ → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → Access 𝓔 s v → [ v ⦂ (T ^ 𝟙) ]
+access-soundness Γ⊨ x∈ access = ⊨-heap Γ⊨ x∈ access
+
+genaccess-soundness : Γ ⊨ 𝓔 / (𝓢 , σ) → Γ ∋ x ⦂ (T ^ q) → GenAccess 𝓔 𝓢 σ x v → [ v ⦂ (T ^ q) ]
+genaccess-soundness {𝓢 = 𝓢} {σ} {q = 𝟙} Γ⊨ x∈ (on-heap x) = access-soundness Γ⊨ x∈ x
+genaccess-soundness {𝓢 = 𝓢} {σ} {q = 𝟚} Γ⊨ x∈ (on-heap x) = ⊥-elim (¬2≤1 (q-var-type x∈))
+genaccess-soundness Γ⊨ x∈ (on-stack x) = ⊨-stack Γ⊨ x∈ x
+
+
+q-bounded-idem : Γ′ ≡ q-bounded q Γ → Γ′ ≡ q-bounded q Γ′
+q-bounded-idem {q = q} {∅} refl = refl
+q-bounded-idem {q = q} {Γ , s ⦂ S} eq
+  with q-of S ≤ᵇ q in eq1
+... | false = q-bounded-idem {Γ = Γ} eq
+q-bounded-idem {q = q} {Γ , s ⦂ S} refl | true
+  with q-of S ≤ᵇ q
+... | true = cong (_, s ⦂ S) (q-bounded-idem{Γ = Γ} refl)
+... | false
+  with eq1
+... | ()
+
 -- value typing
 
-data [_⦂_] : Val → QType → Set where
+data [_⦂_] where {- cf. p 15:11 of WhatIf -}
 
   TVUnit : [ unit ⦂ (Unit ^ q) ]
 
   TVCst : [ cst n ⦂ (Base ^ q) ]
 
-  TVClos : {- construction -}
-    (Γ , s ⦂ S₁) ⊢ e ⦂ S₂
+  TVClos :
+    Γ ⊨ 𝓔 / (𝓢 , σ)
+    -- → q-env 𝓔 ≡ q
+    → Γ ≡ q-bounded q Γ
+    → (Γ , s ⦂ S₁) ⊢ e ⦂ S₂
+    → σ? ≡ (case q of λ{ 𝟙 → nothing ; 𝟚 → just σ})
     → let q₂ = q-of S₂ in
-      let q₁ = q-of S₂ in
+      let q₁ = q-of S₁ in
       [ clos 𝓔 σ? (X s q₁) e q₂ ⦂ Fun S₁ S₂ ^ q ]
 
-  TVRef : {- construction -} [ ref q ℓ ⦂ Ref S ^ q ]
+  TVSub : S₁ <⦂ S₂
+    → [ v ⦂ S₁ ]
+    → [ v ⦂ S₂ ]
+
+  TVRef : {- construction -}
+    [ ref q ℓ ⦂ Ref S ^ q ]
 
 -- operational semantics
 
@@ -235,23 +364,10 @@ infix 30 ⟨_,_⟩
 ∣ ⟪ vs ⟫ ∣ˢ = length vs
 ∣ ⟨ 𝓢 , vs ⟩ ∣ˢ = length vs
 
-postulate _↓_ : Stack → Maybe ℕ → Val
-
 update : StackMap → Ident → ℕ → StackMap
 update σ x n = λ s → case (x ≟ s) of λ where
   (no ¬a) → σ s
   (yes a) → just n
-
--- (H,∅)(x 1) = v
-data Access : Env → String → Val → Set where
-
-  here   : Access ⟨ s ≔ v , 𝓔 ⟩ s v
-  there  : Access 𝓔 s v → Access ⟨ s′ ≔ v′ , 𝓔 ⟩ s v
-
-data GenAccess : Env → Stack → StackMap → Var → Val → Set where
-
-  on-heap   : Access 𝓔 s v → GenAccess 𝓔 𝓢 σ (X s 𝟙) v
-  on-stack  : v ≡ 𝓢 ↓ σ s → GenAccess 𝓔 𝓢 σ (X s 𝟚) v
 
 _⊕ₕ_ : Env → (Var × Val) → Env
 𝓔 ⊕ₕ (X s 𝟙 , v) = ⟨ s ≔ v , 𝓔 ⟩
