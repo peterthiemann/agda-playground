@@ -11,7 +11,7 @@ open import Function using (case_of_)
 open import Relation.Nullary using (¬_)
 open import Relation.Nullary.Decidable using (Dec; yes; no)
 import Relation.Binary.PropositionalEquality as Eq
-open Eq using (_≡_; refl; cong)
+open Eq using (_≡_; refl; cong; cong₂)
 
 Ident = String
 StackMap = Ident → Maybe ℕ
@@ -74,8 +74,18 @@ variable
 
 data _≤_ : Qual → Qual → Set where
   ≤-bottop  : 𝟙 ≤ 𝟚
-  -- ≤-top  : q ≤ 𝟚
   ≤-refl : q ≤ q
+
+≤-bot : 𝟙 ≤ q
+≤-bot {𝟙} = ≤-refl
+≤-bot {𝟚} = ≤-bottop
+
+≤-top : q ≤ 𝟚
+≤-top {𝟙} = ≤-bottop
+≤-top {𝟚} = ≤-refl
+
+≤-antisym : q₁ ≤ q₂ → q₂ ≤ q₁ → q₁ ≡ q₂
+≤-antisym ≤-refl ≤-refl = refl
 
 ≤-trans : q₁ ≤ q₂ → q₂ ≤ q₃ → q₁ ≤ q₃
 ≤-trans ≤-bottop ≤-refl = ≤-bottop
@@ -107,17 +117,19 @@ _≤ᵇ_ : Qual → Qual → Bool
 -- typing
 
 data Type : Set
-data QType : Set where
-  _^_ : (T : Type) → (q : Qual) → QType
+record QType : Set where
+  inductive
+  constructor _^_
+  field
+    t-of : Type
+    q-of : Qual
+open QType public
 
 data Type where
   Unit : Type
   Base : Type
   Fun  : (S₁ : QType) → (S₂ : QType) → Type
   Ref  : (S : QType) → Type
-
-q-of : QType → Qual
-q-of (T ^ q) = q
 
 q-var : Var → Qual
 q-var (X s q) = q
@@ -190,21 +202,49 @@ data _<⦂_ : QType → QType → Set where
 
   SRef : 
     q₁ ≤ q₂
+    → q-of S₁ ≤ q₁
     → S₁ <⦂ S₂
-    → q-of S₂ ≤ q₂
+    → S₂ <⦂ S₁
     → (Ref S₁ ^ q₁) <⦂ (Ref S₂ ^ q₂)
+--
+
+q-of-mono : S₁ <⦂ S₂ → q-of S₁ ≤ q-of S₂
+q-of-mono (SRfl q1≤q2) = q1≤q2
+q-of-mono (SBase q1≤q2) = q1≤q2
+q-of-mono (SFun q1≤q2 S1<S2 S1<S3) = q1≤q2
+q-of-mono (SRef q1≤q2 qS≤ S1<S2 x₁) = q1≤q2
+
+
+<⦂-antisym : S₁ <⦂ S₂ → S₂ <⦂ S₁ → S₁ ≡ S₂
+<⦂-antisym (SRfl x) (SRfl x₁) = cong (Unit ^_) (≤-antisym x x₁)
+<⦂-antisym (SBase x) (SBase x₁) = cong (Base ^_) (≤-antisym x x₁)
+<⦂-antisym (SFun x S₁<⦂S₂ S₁<⦂S₃) (SFun x₁ S₂<⦂S₁ S₂<⦂S₂) = cong₂ _^_ (cong₂ Fun (<⦂-antisym S₂<⦂S₁ S₁<⦂S₂) (<⦂-antisym S₁<⦂S₃ S₂<⦂S₂)) (≤-antisym x x₁)
+<⦂-antisym (SRef x qS≤₁ S₁<⦂S₂ S₁<⦂S₃) (SRef x₁ qS≤₂  S₂<⦂S₁ S₂<⦂S₂) = cong₂ _^_ (cong Ref (<⦂-antisym S₁<⦂S₂ S₂<⦂S₁)) (≤-antisym x x₁)
+
+<⦂-wf : wf S₂ → S₁ <⦂ S₂ → wf S₁
+wf-<⦂ : wf S₁ → S₁ <⦂ S₂ → wf S₂
+
+<⦂-wf wfS (SRfl x) = wf-Unit
+<⦂-wf wfS (SBase x) = wf-Base
+<⦂-wf (wf-Fun wfS wfS₁) (SFun x S₁<⦂S₂ S₁<⦂S₃) = wf-Fun (wf-<⦂ wfS S₁<⦂S₂) (<⦂-wf wfS₁ S₁<⦂S₃)
+<⦂-wf (wf-Ref wfS qS≤q) (SRef q₁≤q qS≤ S₁<⦂S₂ S₂<⦂S₁) with refl ← <⦂-antisym S₁<⦂S₂ S₂<⦂S₁ = wf-Ref wfS (≤-trans (q-of-mono S₁<⦂S₂) qS≤)
+
+wf-<⦂ wfS (SRfl x) = wf-Unit
+wf-<⦂ wfS (SBase x) = wf-Base
+wf-<⦂ (wf-Fun wfS wfS₁) (SFun x S₁<⦂S₂ S₁<⦂S₃) = wf-Fun (<⦂-wf wfS S₁<⦂S₂) (wf-<⦂ wfS₁ S₁<⦂S₃)
+wf-<⦂ (wf-Ref wfS x₂) (SRef q≤q₂ qS≤ S₁<⦂S₂ S₂<⦂S₁) with refl ← <⦂-antisym S₁<⦂S₂ S₂<⦂S₁ = wf-Ref wfS (≤-trans qS≤ q≤q₂)
 
 <⦂-refl : wf S → S <⦂ S
 <⦂-refl wf-Unit = SRfl ≤-refl
 <⦂-refl wf-Base = SBase ≤-refl
 <⦂-refl (wf-Fun wf₁ wf₂) = SFun ≤-refl (<⦂-refl wf₁) (<⦂-refl wf₂)
-<⦂-refl (wf-Ref wf₁ x) = SRef ≤-refl (<⦂-refl wf₁) x
+<⦂-refl (wf-Ref wf₁ x) = SRef ≤-refl x (<⦂-refl wf₁) (<⦂-refl wf₁)
 
 <⦂-trans : S₁ <⦂ S₂ → S₂ <⦂ S₃ → S₁ <⦂ S₃
 <⦂-trans (SRfl q1q2) (SRfl q2q3) = SRfl (≤-trans q1q2 q2q3)
 <⦂-trans (SBase q1q2) (SBase q2q3) = SBase (≤-trans q1q2 q2q3)
 <⦂-trans (SFun q1q2 S1S2 S1S3) (SFun q2q3 S2S3 S2S4) = SFun (≤-trans q1q2 q2q3) (<⦂-trans S2S3 S1S2) (<⦂-trans S1S3 S2S4)
-<⦂-trans (SRef q1q2 S1S2 x₁) (SRef q2q3 S2S3 x₂) = SRef (≤-trans q1q2 q2q3) (<⦂-trans S1S2 S2S3) x₂
+<⦂-trans (SRef q1q2 qS≤ S1S2 S2S1) (SRef q2q3 qS≤₁ S2S3 S3S2) = SRef (≤-trans q1q2 q2q3) qS≤ (<⦂-trans S1S2 S2S3) (<⦂-trans S3S2 S2S1)
 
 data _⊢_⦂_ : Context → Expr → QType → Set where
 
@@ -213,7 +253,8 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
   TVar : Γ ∋ x ⦂ S
     →    Γ ⊢ var x ⦂ S
 
-  TAbs : (Γ′ , s ⦂ (T₁ ^ q₁)) ⊢ e ⦂ (T₂ ^ q₂)
+  TAbs : wf (T₁ ^ q₁)
+    → (Γ′ , s ⦂ (T₁ ^ q₁)) ⊢ e ⦂ (T₂ ^ q₂)
     → Γ′ ≡ q-bounded q Γ
     → Γ ⊢ lam (X s q₁) e q₂ ⦂ ((Fun (T₁ ^ q₁) (T₂ ^ q₂)) ^ q)
 
@@ -231,7 +272,8 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
     → q₁ ≤ q-of S
     → Γ ⊢ seq e₁ e₂ ⦂ S
 
-  TRef : Γ′ ⊢ e ⦂ S
+  TRef : q-of S ≤ q
+    → Γ′ ⊢ e ⦂ S
     → Γ′ ≡ q-bounded q Γ
     → Γ ⊢ ref q e ⦂ (Ref S ^ q)
 
@@ -243,13 +285,36 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
     → S′ <⦂ S
     → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ q)
 
---
+-- typing implies wellformedness (?)
 
-q-of-mono : S₁ <⦂ S₂ → q-of S₁ ≤ q-of S₂
-q-of-mono (SRfl q1≤q2) = q1≤q2
-q-of-mono (SBase q1≤q2) = q1≤q2
-q-of-mono (SFun q1≤q2 S1<S2 S1<S3) = q1≤q2
-q-of-mono (SRef q1≤q2 S1<S2 x₁) = q1≤q2
+wfΓ : Context → Set
+wfΓ Γ = ∀ x S → Γ ∋ x ⦂ S → wf S
+
+wf-ext : wfΓ Γ → wf S → wfΓ (Γ , s ⦂ S)
+wf-ext wfg wfS _ _ (here x) = wfS
+wf-ext wfg wfS _ _ (there x∈) = wfg _ _ x∈
+
+wf-bounded : wfΓ Γ → wfΓ (q-bounded q Γ)
+wf-bounded {Γ , s ⦂ S₁} {q} wfg x S x∈
+  with q-of S₁ ≤ᵇ q
+... | false = wf-bounded (λ x₁ S₂ x₂ → wfg x₁ S₂ (there x₂)) x S x∈
+wf-bounded {Γ , s ⦂ S₁} {q} wfg x S (here x₁) | true = wfg x S (here x₁)
+wf-bounded {Γ , s ⦂ S₁} {q} wfg x S (there x∈) | true = wf-bounded (λ x₁ S₂ x₂ → wfg x₁ S₂ (there x₂)) x S x∈
+
+wf-typing : wfΓ Γ →  Γ ⊢ e ⦂ S → wf S
+wf-typing wfg TUnit = wf-Unit
+wf-typing wfg (TVar x) = wfg _ _ x
+wf-typing wfg (TAbs wf₁ ⊢e refl) = wf-Fun wf₁ (wf-typing (wf-ext (wf-bounded wfg) wf₁) ⊢e)
+wf-typing wfg (TApp ⊢e ⊢e₁)
+  with wf-typing wfg ⊢e
+... | wf-Fun wff wff₁ = wff₁
+wf-typing wfg (TSub ⊢e S₁<⦂S) = wf-<⦂ (wf-typing wfg ⊢e) S₁<⦂S
+wf-typing wfg (TSeq x ⊢e ⊢e₁ x₁) = wf-typing wfg ⊢e₁
+wf-typing wfg (TRef qS≤ ⊢e refl) = wf-Ref (wf-typing (wf-bounded wfg) ⊢e) qS≤
+wf-typing wfg (TDeref ⊢e)
+  with wf-typing wfg ⊢e
+... | wf-Ref wfS x = wfS
+wf-typing wfg (TSetref ⊢e ⊢e₁ x) = wf-Unit
 
 
 -- heap & stack typing
@@ -274,7 +339,7 @@ record _⊨_/_ (Γ : Context) (𝓔 : Env) (𝓢σ : Stack × StackMap) : Set wh
   field
     ⊨-heap : ∀ {s}{T}{v} → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) →  Access 𝓔 s v → [ v ⦂ (T ^ 𝟙) ]
     ⊨-stack : let 𝓢 , σ = 𝓢σ in ∀ {s}{T}{v}{q} → Γ ∋ X s 𝟚 ⦂ (T ^ q) → v ≡ (𝓢 ↓ σ s) → [ v ⦂ (T ^ q) ]
-open _⊨_/_
+open _⊨_/_ public
 
 rename-bounded : Γ′ ≡ q-bounded q Γ → Γ′ ∋ x ⦂ S → Γ ∋ x ⦂ S
 rename-bounded {q = q} {Γ = ∅} {S = S} refl ()
@@ -327,9 +392,9 @@ data [_⦂_] where {- cf. p 15:11 of WhatIf -}
       let q₁ = q-of S₁ in
       [ clos 𝓔 σ? (X s q₁) e q₂ ⦂ Fun S₁ S₂ ^ q ]
 
-  TVSub : S₁ <⦂ S₂
-    → [ v ⦂ S₁ ]
-    → [ v ⦂ S₂ ]
+  -- TVSub : S₁ <⦂ S₂
+  --   → [ v ⦂ S₁ ]
+  --   → [ v ⦂ S₂ ]
 
   TVRef : {- construction -}
     [ ref q ℓ ⦂ Ref S ^ q ]
