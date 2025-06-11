@@ -10,7 +10,7 @@ data Qual : Set where
   𝟙 𝟚 : Qual
 
 variable
-  q q₁ q₂ q₃ q₄ : Qual
+  q q₀ q₁ q₂ q₃ q₄ q′ q₁′ q₂′ : Qual
 
 
 data _≤_ : Qual → Qual → Set where
@@ -61,3 +61,6 @@ _≤ᵇ_ : Qual → Qual → Bool
 
 ≤ᵇ-top : q ≤ᵇ 𝟚 ≡ true
 ≤ᵇ-top = ≤-sound ≤-top
+
+≤ᵇ-mon : q₁ ≤ q₂ → q₂ ≤ᵇ q ≡ true → q₁ ≤ᵇ q ≡ true
+≤ᵇ-mon q1≤q2 q2≤bq = ≤-sound (≤-trans q1≤q2 (≤-complete q2≤bq))
