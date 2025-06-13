@@ -4,7 +4,7 @@ module StackBasedBigStep where
 open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
 open import Data.String using (String; _≟_)
-open import Data.List using (List; []; _∷_; [_]; _++_; length; lookup; map)
+open import Data.List using (List; []; _∷_; [_]; _++_; length; lookup; map; take)
 open import Data.List.Properties using (length-++; ++-identityʳ; ++-assoc)
 open import Data.List.NonEmpty using (List⁺; _∷_; _∷⁺_; head; tail)
 open import Data.List.Relation.Binary.Pointwise using (Pointwise; []; _∷_)
@@ -19,6 +19,34 @@ open import Relation.Nullary using (¬_)
 open import Relation.Nullary.Decidable using (Dec; yes; no)
 import Relation.Binary.PropositionalEquality as Eq
 open Eq using (_≡_; _≢_; refl; sym; trans; subst; cong; cong₂; dcong)
+
+{-
+** The problem
+
+If we pass stack arguments to a heap closure, then we need to ensure that the
+callers' stack does not get corrupted. Corruption can only happen in the presence of
+references.
+
+As an example, suppose we pass a stack reference r which contains another stack reference.
+That is r : ref 2 (ref 2 Int). On the local stack, we allocate a new reference as in
+x = ref 2 (42)
+and overwrite the content of r with it
+r := x
+Now the callers' stack contains a reference to the current stackframe, which becomes
+invalid after return from the heap closure (as this return pops the stack).
+
+** Design alternatives
+
+1. Disallow passing stack references to heap closures.
+   A well-formedness constraint on function types can help: if the function is heap, then its arguments and results must be heap, too.
+
+2. If we pass a stack reference to a heap function, then it should not be written to.
+   To this end, we might introduce a type of read-only references as a supertype of read-write references such that ref 2 T <: roref 2 T' where T' is a read-only supertype of T.
+   Writing to a stack reference could happen indirectly via a stack closure, so we'd have to have a simple effect that all writeable references are on the heap.
+
+   (on the other hand, references to primitive type are ok as we cannot introduce backpointers through this avenue.)
+
+-}
 
 -- some Fin lemmas
 
@@ -93,7 +121,7 @@ open QType public
 data Type q where
   Unit : Type q
   Base : Type q
-  Fun  : (S₁ : QType) → (S₂ : QType) → q-of S₁ ≤ q → q-of S₂ ≤ q → Type q
+  Fun  : (S₁ : QType) → (S₂ : QType) → q-of S₂ ≤ q → Type q
   Ref  : (S : QType) → q-of S ≤ q → Type q
 
 syntax mkQ q t = t ^ q
@@ -141,7 +169,7 @@ data Val where
 
 
 Stack : Set
-Stack = List⁺ (List Val)
+Stack = List Val
 
 
 postulate
@@ -237,75 +265,143 @@ is-bounded qb-∅ = qb-∅
 is-bounded (qb-keep x qbdd) = qb-add x (is-bounded qbdd)
 is-bounded (qb-drop qbdd _) = is-bounded qbdd
 
+data _<⦂′_ {q₁ q₂ : Qual} {qsub : q₁ ≤ q₂} : Type q₁ → Type q₂ → Set
+
 data _<⦂_ : QType → QType → Set where
 
-  SUnit : q₁ ≤ q₂
-    → (Unit ^ q₁) <⦂ (Unit ^ q₂)
+  SQual : (qsub : q₁ ≤ q₂)
+    → _<⦂′_ {qsub = qsub} T₁  T₂
+    → (T₁ ^ q₁) <⦂ (T₂ ^ q₂)
 
-  SBase : q₁ ≤ q₂
-    → (Base ^ q₁) <⦂ (Base ^ q₂)
+data _<⦂′_ {q₁ q₂ qsub} where
 
-  SFun : ∀ {wf₁ wf₂ wf₃ wf₄}
-    → q₁ ≤ q₂
+  SUnit : Unit <⦂′ Unit
+
+  SBase : Base <⦂′ Base
+
+  SFun : ∀ {wf₂ wf₄}
     → S₃ <⦂ S₁
     → S₂ <⦂ S₄
-    → (Fun S₁ S₂ wf₁ wf₂ ^ q₁) <⦂ (Fun S₃ S₄ wf₃ wf₄ ^ q₂)
+    → Fun S₁ S₂ wf₂ <⦂′ Fun S₃ S₄ wf₄
 
-  SRef :
-    q₁ ≤ q₂
+  SRef : ∀ {wf₁ wf₂}
     → S₁ <⦂ S₂
     → S₂ <⦂ S₁
-    → {wf₁ : q-of S₁ ≤ q₁}
-    → {wf₂ : q-of S₂ ≤ q₂}
-    → (Ref S₁ wf₁ ^ q₁) <⦂ (Ref S₂ wf₂ ^ q₂)
-
+    → Ref S₁ wf₁ <⦂′ Ref S₂ wf₂
 
 q-of-mono : S₁ <⦂ S₂ → q-of S₁ ≤ q-of S₂
-q-of-mono (SUnit q1≤q2) = q1≤q2
-q-of-mono (SBase q1≤q2) = q1≤q2
-q-of-mono (SFun q1≤q2 S1<S2 S1<S3) = q1≤q2
-q-of-mono (SRef q1≤q2 S1<S2 S2<S1) = q1≤q2
+q-of-mono (SQual q1≤q2 _) = q1≤q2
+
 
 <⦂-refl : S <⦂ S
-<⦂-refl {Unit ^ q} = SUnit ≤-refl
-<⦂-refl {Base ^ q} = SBase ≤-refl
-<⦂-refl {Fun S₁ S₂ wf₁ wf₂ ^ q} = SFun ≤-refl <⦂-refl <⦂-refl
-<⦂-refl {Ref S x ^ q} = SRef ≤-refl <⦂-refl <⦂-refl
+<⦂′-refl : ∀ {T : Type q} → _<⦂′_ {qsub = ≤-refl} T  T
+
+<⦂-refl {mkQ q T} = SQual ≤-refl <⦂′-refl
+
+<⦂′-refl {T = Unit} = SUnit
+<⦂′-refl {T = Base} = SBase
+<⦂′-refl {T = Fun S₁ S₂ wf₂} = SFun <⦂-refl <⦂-refl
+<⦂′-refl {T = Ref S x} = SRef <⦂-refl <⦂-refl
 
 <⦂-trans : S₁ <⦂ S₂ → S₂ <⦂ S₃ → S₁ <⦂ S₃
-<⦂-trans (SUnit x) (SUnit x₁) = SUnit (≤-trans x x₁)
-<⦂-trans (SBase x) (SBase x₁) = SBase (≤-trans x x₁)
-<⦂-trans (SFun x <⦂-arg₁ <⦂-res₁) (SFun x₁ <⦂-arg₂ <⦂-res₂) = SFun (≤-trans x x₁) (<⦂-trans <⦂-arg₂ <⦂-arg₁) (<⦂-trans <⦂-res₁ <⦂-res₂)
-<⦂-trans (SRef x S₁<⦂S₂ S₂<⦂S₁) (SRef x₁ S₂<⦂S₃ S₃<⦂S₂) = SRef (≤-trans x x₁) (<⦂-trans S₁<⦂S₂ S₂<⦂S₃) (<⦂-trans S₃<⦂S₂ S₂<⦂S₁)
+<⦂′-trans : ∀ {T₁ : Type q₁}{T₂ : Type q₂}{T₃ : Type q₃}{qsub₁ : q₁ ≤ q₂}{qsub₂ : q₂ ≤ q₃}
+  → _<⦂′_ {qsub = qsub₁} T₁ T₂ → _<⦂′_ {qsub = qsub₂} T₂ T₃ → _<⦂′_ {qsub = ≤-trans qsub₁ qsub₂} T₁ T₃
 
+<⦂-trans (SQual qsub T₁<⦂T₂) (SQual qsub₁ T₂<⦂T₃) = SQual (≤-trans qsub qsub₁) (<⦂′-trans T₁<⦂T₂ T₂<⦂T₃)
+
+<⦂′-trans (SUnit) (SUnit) = SUnit
+<⦂′-trans (SBase) (SBase) = SBase
+<⦂′-trans (SFun <⦂-arg₁ <⦂-res₁) (SFun <⦂-arg₂ <⦂-res₂) = SFun (<⦂-trans <⦂-arg₂ <⦂-arg₁) (<⦂-trans <⦂-res₁ <⦂-res₂)
+<⦂′-trans (SRef S₁<⦂S₂ S₂<⦂S₁) (SRef S₂<⦂S₃ S₃<⦂S₂) = SRef (<⦂-trans S₁<⦂S₂ S₂<⦂S₃) (<⦂-trans S₃<⦂S₂ S₂<⦂S₁)
 
 <⦂-antisym : S₁ <⦂ S₂ → S₂ <⦂ S₁ → S₁ ≡ S₂
-<⦂-antisym (SUnit x) (SUnit x₁) = cong (λ q → _ ^ q) (≤-antisym x x₁)
-<⦂-antisym (SBase x) (SBase x₁) = cong (λ q → _ ^ q) (≤-antisym x x₁)
-<⦂-antisym (SFun q₁<q₂ S₁<⦂S₂ S₁<⦂S₃) (SFun q₂<q₁ S₂<⦂S₁ S₂<⦂S₂)
-  with refl ← ≤-antisym q₁<q₂ q₂<q₁
+<⦂′-antisym : ∀ {T₁ T₂ : Type q} → _<⦂′_ {qsub = ≤-refl} T₁ T₂ → _<⦂′_ {qsub = ≤-refl} T₂ T₁ → T₁ ≡ T₂
+
+<⦂-antisym (SQual qsub T₁<⦂T₂) (SQual qsub₁ T₂<⦂T₁)
+  with ≤-antisym qsub qsub₁
+<⦂-antisym (SQual ≤-refl T₁<⦂T₂) (SQual ≤-refl T₂<⦂T₁) | refl
+  = cong (mkQ _) (<⦂′-antisym T₁<⦂T₂ T₂<⦂T₁)
+
+<⦂′-antisym (SUnit) (SUnit) = refl
+<⦂′-antisym (SBase) (SBase) = refl
+<⦂′-antisym (SFun S₁<⦂S₂ S₁<⦂S₃) (SFun S₂<⦂S₁ S₂<⦂S₂)
   with refl ← <⦂-antisym S₂<⦂S₁ S₁<⦂S₂
   with refl ← <⦂-antisym S₁<⦂S₃ S₂<⦂S₂
-  = cong (λ T → T ^ _) (cong₂ (Fun _ _) ≤-irrelevant ≤-irrelevant)
-<⦂-antisym (SRef q₁<q₂ S₁<⦂S₂ _) (SRef q₂<q₁  S₂<⦂S₁ _)
-  with refl ← ≤-antisym q₁<q₂ q₂<q₁
+  = cong (Fun _ _) ≤-irrelevant
+<⦂′-antisym (SRef S₁<⦂S₂ _) (SRef  S₂<⦂S₁ _)
   with refl ← <⦂-antisym S₁<⦂S₂ S₂<⦂S₁
-  = cong (λ T → T ^ _) (cong (Ref _) ≤-irrelevant)
+  = cong (Ref _) ≤-irrelevant
 
-subsume-aux : Type 𝟙 → Type 𝟚
-subsume-aux Unit = Unit
-subsume-aux Base = Base
-subsume-aux (Fun S₁ S₂ wf₁ wf₂) = Fun S₁ S₂ ≤-top ≤-top
-subsume-aux (Ref S wf) = Ref S ≤-top
 
-subsume : (S : QType) → q-of S ≡ 𝟙 → QType
-subsume (mkQ q T) refl = subsume-aux T ^ 𝟚
+-- data _<⦂_ : QType → QType → Set where
 
-<⦂-subsume : (S : QType) → (q=𝟙 : q-of S ≡ 𝟙) → S <⦂ subsume S q=𝟙
-<⦂-subsume (mkQ q Unit) refl = SUnit ≤-bottop
-<⦂-subsume (mkQ q Base) refl = SBase ≤-bottop
-<⦂-subsume (mkQ q (Fun S₁ S₂ ≤-refl ≤-refl)) refl = SFun ≤-bottop <⦂-refl <⦂-refl
-<⦂-subsume (mkQ q (Ref S ≤-refl)) refl = SRef ≤-bottop <⦂-refl <⦂-refl
+--   SUnit : q₁ ≤ q₂
+--     → (Unit ^ q₁) <⦂ (Unit ^ q₂)
+
+--   SBase : q₁ ≤ q₂
+--     → (Base ^ q₁) <⦂ (Base ^ q₂)
+
+--   SFun : ∀ {wf₂ wf₄}
+--     → q₁ ≤ q₂
+--     → S₃ <⦂ S₁
+--     → S₂ <⦂ S₄
+--     → (Fun S₁ S₂ wf₂ ^ q₁) <⦂ (Fun S₃ S₄ wf₄ ^ q₂)
+
+--   SRef :
+--     q₁ ≤ q₂
+--     → S₁ <⦂ S₂
+--     → S₂ <⦂ S₁
+--     → {wf₁ : q-of S₁ ≤ q₁}
+--     → {wf₂ : q-of S₂ ≤ q₂}
+--     → (Ref S₁ wf₁ ^ q₁) <⦂ (Ref S₂ wf₂ ^ q₂)
+
+
+-- q-of-mono : S₁ <⦂ S₂ → q-of S₁ ≤ q-of S₂
+-- q-of-mono (SUnit q1≤q2) = q1≤q2
+-- q-of-mono (SBase q1≤q2) = q1≤q2
+-- q-of-mono (SFun q1≤q2 S1<S2 S1<S3) = q1≤q2
+-- q-of-mono (SRef q1≤q2 S1<S2 S2<S1) = q1≤q2
+
+-- <⦂-refl : S <⦂ S
+-- <⦂-refl {Unit ^ q} = SUnit ≤-refl
+-- <⦂-refl {Base ^ q} = SBase ≤-refl
+-- <⦂-refl {Fun S₁ S₂ wf₂ ^ q} = SFun ≤-refl <⦂-refl <⦂-refl
+-- <⦂-refl {Ref S x ^ q} = SRef ≤-refl <⦂-refl <⦂-refl
+
+-- <⦂-trans : S₁ <⦂ S₂ → S₂ <⦂ S₃ → S₁ <⦂ S₃
+-- <⦂-trans (SUnit x) (SUnit x₁) = SUnit (≤-trans x x₁)
+-- <⦂-trans (SBase x) (SBase x₁) = SBase (≤-trans x x₁)
+-- <⦂-trans (SFun x <⦂-arg₁ <⦂-res₁) (SFun x₁ <⦂-arg₂ <⦂-res₂) = SFun (≤-trans x x₁) (<⦂-trans <⦂-arg₂ <⦂-arg₁) (<⦂-trans <⦂-res₁ <⦂-res₂)
+-- <⦂-trans (SRef x S₁<⦂S₂ S₂<⦂S₁) (SRef x₁ S₂<⦂S₃ S₃<⦂S₂) = SRef (≤-trans x x₁) (<⦂-trans S₁<⦂S₂ S₂<⦂S₃) (<⦂-trans S₃<⦂S₂ S₂<⦂S₁)
+
+
+-- <⦂-antisym : S₁ <⦂ S₂ → S₂ <⦂ S₁ → S₁ ≡ S₂
+-- <⦂-antisym (SUnit x) (SUnit x₁) = cong (λ q → _ ^ q) (≤-antisym x x₁)
+-- <⦂-antisym (SBase x) (SBase x₁) = cong (λ q → _ ^ q) (≤-antisym x x₁)
+-- <⦂-antisym (SFun q₁<q₂ S₁<⦂S₂ S₁<⦂S₃) (SFun q₂<q₁ S₂<⦂S₁ S₂<⦂S₂)
+--   with refl ← ≤-antisym q₁<q₂ q₂<q₁
+--   with refl ← <⦂-antisym S₂<⦂S₁ S₁<⦂S₂
+--   with refl ← <⦂-antisym S₁<⦂S₃ S₂<⦂S₂
+--   = cong (mkQ _) (cong (Fun _ _) ≤-irrelevant)
+-- <⦂-antisym (SRef q₁<q₂ S₁<⦂S₂ _) (SRef q₂<q₁  S₂<⦂S₁ _)
+--   with refl ← ≤-antisym q₁<q₂ q₂<q₁
+--   with refl ← <⦂-antisym S₁<⦂S₂ S₂<⦂S₁
+--   = cong (λ T → T ^ _) (cong (Ref _) ≤-irrelevant)
+
+-- subsume-aux : Type 𝟙 → Type 𝟚
+-- subsume-aux Unit = Unit
+-- subsume-aux Base = Base
+-- subsume-aux (Fun S₁ S₂ wf₂) = Fun S₁ S₂ ≤-top
+-- subsume-aux (Ref S wf) = Ref S ≤-top
+
+-- subsume : (S : QType) → q-of S ≡ 𝟙 → QType
+-- subsume (mkQ q T) refl = subsume-aux T ^ 𝟚
+
+-- <⦂-subsume : (S : QType) → (q=𝟙 : q-of S ≡ 𝟙) → S <⦂ subsume S q=𝟙
+-- <⦂-subsume (mkQ q Unit) refl = SUnit ≤-bottop
+-- <⦂-subsume (mkQ q Base) refl = SBase ≤-bottop
+-- <⦂-subsume (mkQ q (Fun S₁ S₂ ≤-refl)) refl = SFun ≤-bottop <⦂-refl <⦂-refl
+-- <⦂-subsume (mkQ q (Ref S ≤-refl)) refl = SRef ≤-bottop <⦂-refl <⦂-refl
 
 -- context subtyping
 
@@ -329,14 +425,12 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
   TAbs : ∀ {S≤x}
     → (Γ′ , x ⦂ S₁ [ S≤x ]) ⊢ e ⦂ S₂
     → q-Bounded q Γ Γ′
-    → let q₁ = q-of S₁ ; q₂ = q-of S₂
-    in q-var x ≡ q-of S₁
-    → {wf₁ : q₁ ≤ q}
-    → {wf₂ : q₂ ≤ q}
-    → Γ ⊢ lam q x e q₂ ⦂ ((Fun S₁ S₂ wf₁ wf₂) ^ q)
+    → let q₂ = q-of S₂
+    in {wf₂ : q₂ ≤ q}
+    → Γ ⊢ lam q x e q₂ ⦂ ((Fun S₁ S₂ wf₂) ^ q)
 
-  TApp : ∀ {wf₁ wf₂}
-    → Γ ⊢ e₁ ⦂ (Fun S₁ S₂ wf₁ wf₂ ^ 𝟚)
+  TApp : ∀ {wf₂}
+    → Γ ⊢ e₁ ⦂ (Fun S₁ S₂ wf₂ ^ 𝟚)
     → Γ ⊢ e₂ ⦂ S₁
     → Γ ⊢ app e₁ e₂ ⦂ S₂
 
@@ -344,16 +438,13 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
     → S <⦂ S′
     → Γ ⊢ e ⦂ S′
 
-  TSeq : q₁ ≤ q₂
-    → Γ ⊢ e₁ ⦂ (Unit ^ q₁)
+  TSeq :
+    Γ ⊢ e₁ ⦂ (Unit ^ 𝟚)
     → Γ ⊢ e₂ ⦂ S
-    → q₁ ≤ q-of S
     → Γ ⊢ seq e₁ e₂ ⦂ S
 
-  TRef :
-    Γ′ ⊢ e ⦂ S
-    → q-Bounded q Γ Γ′
-    → {wf : q-of S ≤ q}
+  TRef : {wf : q-of S ≤ q}
+    → Γ ⊢ e ⦂ S
     → Γ ⊢ ref q e ⦂ (Ref S wf ^ q)
 
   TDeref : {wf : q-of S ≤ q}
@@ -363,52 +454,55 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
   TSetref : {wf : q-of S ≤ q}
     → Γ ⊢ e₁ ⦂ (Ref S wf ^ q)
     → Γ ⊢ e₂ ⦂ S
-    → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ q)
+    → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ 𝟚)
 
 -- typing is closed under context subtyping
 
-q-Bounded-<<⦂ : Γ′ <<⦂ Γ → q-Bounded q Γ Γ″ → ∃[ Γ‴ ] Γ‴ <<⦂ Γ″ × q-Bounded q Γ′ Γ‴
-q-Bounded-<<⦂ ∅ qb-∅ = ∅ , ∅ , qb-∅
-q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-keep qS≤ qbdd)
-  with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
-... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out = (Γ‴ , _ ⦂ _ [ _ ]) , (Γ‴<<⦂Γ″ ,⦂ S′<⦂S) , qb-keep (≤-trans (q-of-mono S′<⦂S) qS≤) qbdd-out
-q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-drop qbdd f)
-  with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
-... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out =  Γ‴ , Γ‴<<⦂Γ″ , qb-drop qbdd-out {!!}
+-- q-Bounded-<<⦂ : Γ′ <<⦂ Γ → q-Bounded q Γ Γ″ → ∃[ Γ‴ ] Γ‴ <<⦂ Γ″ × q-Bounded q Γ′ Γ‴
+-- q-Bounded-<<⦂ ∅ qb-∅ = ∅ , ∅ , qb-∅
+-- q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-keep qS≤ qbdd)
+--   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
+-- ... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out = (Γ‴ , _ ⦂ _ [ _ ]) , (Γ‴<<⦂Γ″ ,⦂ S′<⦂S) , qb-keep (≤-trans (q-of-mono S′<⦂S) qS≤) qbdd-out
+-- q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-drop qbdd f)
+--   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
+-- ... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out =  Γ‴ , Γ‴<<⦂Γ″ , qb-drop qbdd-out {!!}
 
-context-sub-variable : Γ ∋ x ⦂ S → Γ′ <<⦂ Γ → ∃[ S′ ] S′ <⦂ S × Γ′ ∋ x ⦂ S′
-context-sub-variable here (_ ,⦂ S′<⦂S) = _ , S′<⦂S , here
-context-sub-variable (there x∈ x≢) (Γ′<<⦂Γ ,⦂ _)
-  with context-sub-variable x∈ Γ′<<⦂Γ
-... | S′ , S′<⦂S , x∈′ = S′ , S′<⦂S , there x∈′ x≢
+-- context-sub-variable : Γ ∋ x ⦂ S → Γ′ <<⦂ Γ → ∃[ S′ ] S′ <⦂ S × Γ′ ∋ x ⦂ S′
+-- context-sub-variable here (_ ,⦂ S′<⦂S) = _ , S′<⦂S , here
+-- context-sub-variable (there x∈ x≢) (Γ′<<⦂Γ ,⦂ _)
+--   with context-sub-variable x∈ Γ′<<⦂Γ
+-- ... | S′ , S′<⦂S , x∈′ = S′ , S′<⦂S , there x∈′ x≢
 
-context-subtyping : Γ ⊢ e ⦂ S → Γ′ <<⦂ Γ → Γ′ ⊢ e ⦂ S
-context-subtyping TUnit Γ′<<⦂Γ = TUnit
-context-subtyping (TVar x∈) Γ′<<⦂Γ
-  with context-sub-variable x∈ Γ′<<⦂Γ
-... | S′ , S′<⦂S , x∈′ = TSub (TVar x∈′) S′<⦂S
-context-subtyping {Γ = Γ}{Γ′ = Γ′} (TAbs {S≤x = S≤x} ⊢e qbdd eq) Γ′<<⦂Γ
-  with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
-... | _ , Γ‴<<⦂Γ′ , qbdd-out
-  = TAbs {S≤x = S≤x} (context-subtyping ⊢e (Γ‴<<⦂Γ′ ,⦂ <⦂-refl)) qbdd-out eq
-context-subtyping (TApp ⊢e ⊢e₁) Γ′<<⦂Γ = TApp (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
-context-subtyping (TSub ⊢e x) Γ′<<⦂Γ = TSub (context-subtyping ⊢e Γ′<<⦂Γ) x
-context-subtyping (TSeq x ⊢e ⊢e₁ x₁) Γ′<<⦂Γ = TSeq x (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ) x₁
-context-subtyping (TRef ⊢e qbdd) Γ′<<⦂Γ
-  with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
-... | _ , Γ‴<<⦂Γ′ , qbdd-out = TRef (context-subtyping ⊢e Γ‴<<⦂Γ′) qbdd-out 
-context-subtyping (TDeref ⊢e) Γ′<<⦂Γ = TDeref (context-subtyping ⊢e Γ′<<⦂Γ)
-context-subtyping (TSetref ⊢e ⊢e₁) Γ′<<⦂Γ = TSetref (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
+-- context-subtyping : Γ ⊢ e ⦂ S → Γ′ <<⦂ Γ → Γ′ ⊢ e ⦂ S
+-- context-subtyping TUnit Γ′<<⦂Γ = TUnit
+-- context-subtyping (TVar x∈) Γ′<<⦂Γ
+--   with context-sub-variable x∈ Γ′<<⦂Γ
+-- ... | S′ , S′<⦂S , x∈′ = TSub (TVar x∈′) S′<⦂S
+-- context-subtyping {Γ = Γ}{Γ′ = Γ′} (TAbs {S≤x = S≤x} ⊢e qbdd eq) Γ′<<⦂Γ
+--   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
+-- ... | _ , Γ‴<<⦂Γ′ , qbdd-out
+--   = TAbs {S≤x = S≤x} (context-subtyping ⊢e (Γ‴<<⦂Γ′ ,⦂ <⦂-refl)) qbdd-out eq
+-- context-subtyping (TApp ⊢e ⊢e₁) Γ′<<⦂Γ = TApp (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
+-- context-subtyping (TSub ⊢e x) Γ′<<⦂Γ = TSub (context-subtyping ⊢e Γ′<<⦂Γ) x
+-- context-subtyping (TSeq x ⊢e ⊢e₁ x₁) Γ′<<⦂Γ = TSeq x (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ) x₁
+-- context-subtyping (TRef ⊢e qbdd) Γ′<<⦂Γ
+--   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
+-- ... | _ , Γ‴<<⦂Γ′ , qbdd-out = TRef (context-subtyping ⊢e Γ‴<<⦂Γ′) qbdd-out 
+-- context-subtyping (TDeref ⊢e) Γ′<<⦂Γ = TDeref (context-subtyping ⊢e Γ′<<⦂Γ)
+-- context-subtyping (TSetref ⊢e ⊢e₁) Γ′<<⦂Γ = TSetref (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
 
 
 -- heap & stack typing
 
 _↓_ : Stack → Maybe ℕ → Maybe Val
-(xs ∷ _) ↓ just n
-  with n <ᵇ length xs in eq
-... | false = nothing
-... | true = just (lookup xs (fromℕ< (<ᵇ⇒< n (length xs) (subst 𝕋 (sym eq) tt))))
-(xs ∷ _) ↓ nothing = nothing
+xs ↓ nothing = nothing
+[] ↓ just i = nothing
+(x ∷ xs) ↓ just zero = just x
+(x ∷ xs) ↓ just (suc i) = xs ↓ just i
+
+↓-mono : ∀ {n : ℕ} {xs : Stack} {mi : Maybe ℕ} {r : Val} →  just r ≡ take n xs ↓ mi → just r ≡ xs ↓ mi
+↓-mono {suc n} {x ∷ xs} {just zero} refl = refl
+↓-mono {suc n} {x ∷ xs} {just (suc i)} take↓≡ = ↓-mono {n} {xs} {just i} take↓≡
 
 -- (H,∅)(x 1) = v
 data Access : Env → String → Val → Set where
@@ -438,6 +532,8 @@ adjust-stack : HSType → List (Type 𝟚) → HSType
 adjust-stack Σₕₛ Σₛ 𝟙 = Σₕₛ 𝟙
 adjust-stack Σₕₛ Σₛ 𝟚 = Σₛ
 
+---- heap/stack typing extension
+
 _≼_ : HSType → HSType → Set
 Σₕₛ ≼ Σₕₛ′ = ∀ q → ∃[ qts ] Σₕₛ q ++ qts ≡  Σₕₛ′ q
 
@@ -455,6 +551,11 @@ _≼_ : HSType → HSType → Set
 ≼-extend-Σ 𝟙 S₁ 𝟚 = [] , (++-identityʳ _)
 ≼-extend-Σ 𝟚 S₁ 𝟙 = [] , (++-identityʳ _)
 ≼-extend-Σ 𝟚 S₁ 𝟚 = [ S₁ ] , refl
+
+≼-adjust : ∀ {Σ₁ Σ₂ : HSType} → Σ₁ ≼ Σ₂ → Σ₁ ≼ adjust-stack Σ₂ (Σ₁ 𝟚)
+≼-adjust ≼Σ₁ 𝟙 = ≼Σ₁ 𝟙
+≼-adjust {Σ₁} ≼Σ₁ 𝟚 = [] , ++-identityʳ (Σ₁ 𝟚)
+  
 
 ≼⇒length : Σₕₛ ≼ Σₕₛ′ → ∀ q → length (Σₕₛ q) ≤ℕ length (Σₕₛ′ q)
 ≼⇒length {Σₕₛ} Σ≼ q
@@ -475,6 +576,8 @@ _≼_ : HSType → HSType → Set
 ≼-lookup {Σₕₛ = Σₕₛ}{Σₕₛ′} Σ≼ q i
   using qts , eq ← Σ≼ q
   = trans (lookup-++ (Σₕₛ q) qts i) (≼-lookup-aux (Σₕₛ q) qts (Σₕₛ′ q) eq i)
+
+---- value typing & environment agreement
 
 data ⟨_⟩⊢[_⦂_] (Σₕₛ : HSType) : Val → QType → Set
 
@@ -505,9 +608,8 @@ data ⟨_⟩⊢[_⦂_] Σₕₛ where {- cf. p 15:11 of WhatIf -}
     → σ? ≡ resolve q σ
     → let q₂ = q-of S₂ in
       let q₁ = q-of S₁ in
-      (wf₁ : q₁ ≤ q)
-    → (wf₂ : q₂ ≤ q)
-    → (Fun S₁ S₂ wf₁ wf₂ ^ q) <⦂ S
+      (wf₂ : q₂ ≤ q)
+    → (Fun S₁ S₂ wf₂ ^ q) <⦂ S
     → ⟨ Σₕₛ ⟩⊢[ clos q 𝓔 σ? x e q₂′ ⦂ S ]
 
   TVRef :
@@ -517,27 +619,35 @@ data ⟨_⟩⊢[_⦂_] Σₕₛ where {- cf. p 15:11 of WhatIf -}
     → ⟨ Σₕₛ ⟩⊢[ ref q ℓ ⦂ S ]
 
 -- heap typing
-⊢ᵥ-adjust : ∀ { vs : List Val} {Σₛ : List (Type 𝟚)}
-  → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ]) vs Σₛ
+⊢ᵥ-adjust : ∀ {Σₛ : List (Type 𝟚)}
   → (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ])
   → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ]
-⊨-adjust :  ∀ { vs : List Val}{Σₛ : List (Type 𝟚)}
-  → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ]) vs Σₛ
+⊨-adjust :  ∀ {Σₛ : List (Type 𝟚)}
   → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / (𝓢 , σ)
-  → ⟨ adjust-stack Σₕₛ Σₛ , Γ ⟩⊨ 𝓔 / (vs ∷⁺ 𝓢 , const nothing)
+  → ⟨ adjust-stack Σₕₛ Σₛ , Γ ⟩⊨ 𝓔 / (vs , const nothing)
 
 -- stack adjustment does not happen for a stack-allocated closure
 -- in this case, the caller's stack is carried over to the callee
 
-⊢ᵥ-adjust ⊢ₛvs TVUnit = TVUnit
-⊢ᵥ-adjust ⊢ₛvs TVCst = TVCst
-⊢ᵥ-adjust ⊢ₛvs (TVClos {q = 𝟙} ⊨𝓔 qbd ⊢e σ?≡ wf₁ wf₂ <⦂S) = TVClos (⊨-adjust ⊢ₛvs ⊨𝓔) qbd ⊢e σ?≡ wf₁ wf₂ <⦂S
-⊢ᵥ-adjust ⊢ₛvs (TVClos {q = 𝟚} ⊨𝓔 qbd ⊢e σ?≡ wf₁ wf₂ (SFun () <⦂S <⦂S₁))
-⊢ᵥ-adjust ⊢ₛvs (TVRef ℓ< lkup≡ (SRef ≤-refl x₂ x₃)) = TVRef ℓ< lkup≡ (SRef ≤-refl x₂ x₃)
+⊢ᵥ-adjust TVUnit = TVUnit
+⊢ᵥ-adjust TVCst = TVCst
+⊢ᵥ-adjust (TVClos {𝓢 = 𝓢} {q = 𝟙} ⊨𝓔 qbd ⊢e σ?≡ wf₂ <⦂S) = TVClos {𝓢 = 𝓢} (⊨-adjust ⊨𝓔) qbd ⊢e σ?≡ wf₂ <⦂S
+⊢ᵥ-adjust (TVClos {q = 𝟚} ⊨𝓔 qbd ⊢e σ?≡ wf₂ (SQual () x))
+⊢ᵥ-adjust (TVRef {q = 𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢ᵥ-adjust (TVRef {q = 𝟚} ℓ< lkup≡ (SQual () x))
 
-⊨-adjust ⊢ₛvs ⊨𝓔 = mk-⊨ (λ x∈ acc → ⊢ᵥ-adjust ⊢ₛvs (⊨-heap ⊨𝓔 x∈ acc))
-                        (λ{ x∈ () })
+⊨-adjust ⊨𝓔 = mk-⊨ (λ x∈ acc → ⊢ᵥ-adjust (⊨-heap ⊨𝓔 x∈ acc)) (λ{ x∈ () })
 
+⊢ᵥ-adjust-𝟚 : ∀ { vs : List Val} {Σₛ : List (Type 𝟚)}
+  → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ]) vs Σₛ
+  → (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ])
+  → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ]
+
+⊢ᵥ-adjust-𝟚 ⊢ₛvs TVUnit = TVUnit
+⊢ᵥ-adjust-𝟚 ⊢ₛvs TVCst = TVCst
+⊢ᵥ-adjust-𝟚 ⊢ₛvs (TVClos x x₁ x₂ x₃ wf₂ x₄) = {!!}
+⊢ᵥ-adjust-𝟚 ⊢ₛvs (TVRef {q = 𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢ᵥ-adjust-𝟚 ⊢ₛvs (TVRef {q = 𝟚} ℓ< lkup≡ <⦂S) = TVRef {!!} {!!} <⦂S
 
 _⊢ₕ_ : HSType → Heap → Set
 Σₕₛ ⊢ₕ 𝓗 = Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙)]) 𝓗 (Σₕₛ 𝟙)
@@ -555,7 +665,7 @@ _⊢ₕ_ : HSType → Heap → Set
   → Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙)]) vs Σₕ
   → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙)]) vs Σₕ
 ⊢ₕ-adjust-aux Σₛ ⊢ₛvs [] = []
-⊢ₕ-adjust-aux Σₛ ⊢ₛvs (x∼y ∷ pws) = ⊢ᵥ-adjust ⊢ₛvs x∼y ∷ ⊢ₕ-adjust-aux Σₛ ⊢ₛvs pws
+⊢ₕ-adjust-aux Σₛ ⊢ₛvs (x∼y ∷ pws) = ⊢ᵥ-adjust x∼y ∷ ⊢ₕ-adjust-aux Σₛ ⊢ₛvs pws
 
 ⊢ₕ-adjust : ∀ {vs : List Val} (Σₛ : List (Type 𝟚))
   → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ (T ^ 𝟚) ]) vs Σₛ
@@ -566,10 +676,23 @@ _⊢ₕ_ : HSType → Heap → Set
 -- stack typing
 
 _⊢ₛ_ : HSType → Stack → Set
-Σₕₛ ⊢ₛ 𝓢 = Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟚)]) (𝓢 .head) (Σₕₛ 𝟚)
+Σₕₛ ⊢ₛ 𝓢 = Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟚)]) 𝓢 (Σₕₛ 𝟚)
 
-⊢ₛ-length : Σₕₛ ⊢ₛ 𝓢 → length (Σₕₛ 𝟚) ≡ length (𝓢 .head)
+⊢ₛ-length : Σₕₛ ⊢ₛ 𝓢 → length (Σₕₛ 𝟚) ≡ length 𝓢
 ⊢ₛ-length ⊢𝓢 = ⊢ₕₛ-length-aux ⊢𝓢
+
+⊢ₛ-adjust-aux : ∀ {vs : List Val} {Σₛ : List (Type 𝟚)}
+  → Σₕₛ ≼ Σₕₛ′
+  → Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟚)]) vs Σₛ
+  → Pointwise (λ v T → ⟨ adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⟩⊢[ v ⦂ (T ^ 𝟚)]) vs Σₛ
+⊢ₛ-adjust-aux ≼Σ [] = []
+⊢ₛ-adjust-aux ≼Σ (x∼y ∷ pws) = {!⊢ᵥ-adjust!} ∷ (⊢ₛ-adjust-aux ≼Σ pws)
+
+⊢ₛ-adjust :
+  Σₕₛ ≼ Σₕₛ′
+  → Σₕₛ ⊢ₛ 𝓢
+  → adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⊢ₛ 𝓢
+⊢ₛ-adjust ≼Σ ⊢𝓢 = ⊢ₛ-adjust-aux ≼Σ ⊢𝓢
 
 -- value typing extends
 
@@ -578,7 +701,7 @@ _⊢ₛ_ : HSType → Stack → Set
 [⦂]-≼ : Σₕₛ ≼ Σₕₛ′ → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ] → ⟨ Σₕₛ′ ⟩⊢[ v ⦂ S ]
 [⦂]-≼ Σ≼ TVUnit = TVUnit
 [⦂]-≼ Σ≼ TVCst = TVCst
-[⦂]-≼ Σ≼ (TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₁ wf₂ <⦂S) = TVClos (⊨-extend-Σ Σ≼ ⊨𝓔) qbd ⊢e σ?≡ wf₁ wf₂ <⦂S
+[⦂]-≼ Σ≼ (TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₂ <⦂S) = TVClos (⊨-extend-Σ Σ≼ ⊨𝓔) qbd ⊢e σ?≡ wf₂ <⦂S
 [⦂]-≼ {Σₕₛ = Σₕₛ} Σ≼ (TVRef {q = q} ℓ< lkup≡ <⦂S)
   with Σ≼ q in eq
 ... | qts , eq1 = TVRef (≤ℕ-trans ℓ< (≼⇒length Σ≼ q)) (trans (lookup-from-i′ (Σₕₛ q) ℓ< eq1) lkup≡) <⦂S
@@ -601,23 +724,6 @@ _⊢ₛ_ : HSType → Stack → Set
 ⊢ₕ-≼ {Σₕₛ} Σ≼ ⊢𝓗 = {!⊢ₕ-≼-aux Σ≼ {Σₕₛ 𝟙} ⊢𝓗!}
 -}
 
--- -- typing relations
-
--- _≲_ : Stack → Stack → Set
--- 𝓢₁ ≲ 𝓢₂ =
---   let l1 = length (𝓢₁ .head)
---       l2 = length (𝓢₂ .head)
---   in  Σ (l1 ≤ℕ l2) λ l1≤l2 → ∀ (i : Fin l1) → ∀ S → [ lookup (𝓢₁ .head) i ⦂ S ] → [ lookup (𝓢₂ .head) (inject≤ i l1≤l2) ⦂ S ]
-
--- ≲-refl : 𝓢 ≲ 𝓢
--- ≲-refl .proj₁ = ≤ℕ-refl
--- ≲-refl .proj₂ i S lkup rewrite inject≤-refl i = lkup
-
--- ≲-trans : {𝓢₁ 𝓢₂ 𝓢₃ : Stack} → 𝓢₁ ≲ 𝓢₂ → 𝓢₂ ≲ 𝓢₃ → 𝓢₁ ≲ 𝓢₃
--- ≲-trans (l1≤l2 , cond12) (l2≤l3 , cond23) .proj₁ = ≤ℕ-trans l1≤l2 l2≤l3
--- ≲-trans {𝓢₃ = 𝓢₃} (l1≤l2 , cond12) (l2≤l3 , cond23) .proj₂ =
---   λ i S lkup → let lkup₁ = cond12 i S lkup in subst (λ □ → [ lookup (𝓢₃ .head) □ ⦂ S ]) (inject≤-trans i {l1≤l2} {l2≤l3}) (cond23 (inject≤ i l1≤l2) S lkup₁)
-
 
 rename-bounded′ : q-Bounded q Γ Γ′ → Γ′ ∋ x ⦂ S → Γ ∋ x ⦂ S
 rename-bounded′ (qb-keep x qbdd) (here) = here
@@ -636,19 +742,6 @@ restrict′ {𝓢σ = 𝓢 , σ} Γ⊨ qbdd = mk-⊨ (λ x∈ access → ⊨-hea
                               ; (there x∈ x≢) (there access s≢) → ⊨-heap ⊨Γ x∈ access})
                             λ{ (there x∈ x≢) v≡ → ⊨-stack ⊨Γ x∈ v≡}
 
-{-
-rename-bounded : Γ′ ≡ q-bounded q Γ → Γ′ ∋ x ⦂ S → Γ ∋ x ⦂ S
-rename-bounded {q = q} {Γ = ∅} {S = S} refl ()
-rename-bounded {q = q} {Γ = Γ , s ⦂ S₁ [ S₁≤x ]} {S = S} Γ′≡ x∈
-  with q-of S₁ ≤ᵇ q
-... | false = there (rename-bounded Γ′≡ x∈) {!!}
-rename-bounded {q = q} {Γ , s ⦂ S₁ [ S₁≤x ]} {S = S} refl (here) | true = here
-rename-bounded {q = q} {Γ , s ⦂ S₁ [ S₁≤x ]} {S = S} refl (there x∈ x≢) | true = there (rename-bounded refl x∈) x≢
-
-restrict : Γ ⊨ 𝓔 / 𝓢σ → Γ′ ≡ q-bounded q Γ → Γ′ ⊨ 𝓔 / 𝓢σ
-restrict {𝓢σ = 𝓢 , σ} Γ⊨ refl = record { ⊨-heap = λ x∈ access → ⊨-heap Γ⊨ (rename-bounded refl x∈) access
-                                       ; ⊨-stack = λ x∈ v≡ → ⊨-stack Γ⊨ (rename-bounded refl x∈) v≡ }
--}
 
 access-soundness : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢σ → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → Access 𝓔 s v → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
 access-soundness Γ⊨ x∈ access = ⊨-heap Γ⊨ x∈ access
@@ -658,24 +751,11 @@ genaccess-soundness {𝓢 = 𝓢} {σ} {q = 𝟙} Γ⊨ x∈ (on-heap x) = acces
 genaccess-soundness {𝓢 = 𝓢} {σ} {q = 𝟚} Γ⊨ x∈ (on-heap x) = ⊥-elim (¬2≤1 (q-var-type x∈))
 genaccess-soundness Γ⊨ x∈ (on-stack x) = ⊨-stack Γ⊨ x∈ x
 
-{-
-q-bounded-idem : Γ′ ≡ q-bounded q Γ → Γ′ ≡ q-bounded q Γ′
-q-bounded-idem {q = q} {∅} refl = refl
-q-bounded-idem {q = q} {Γ , s ⦂ S [ S≤x ]} eq
-  with q-of S ≤ᵇ q in eq1
-... | false = q-bounded-idem {Γ = Γ} eq
-q-bounded-idem {q = q} {Γ , s ⦂ S [ S≤x ]} refl | true
-  with q-of S ≤ᵇ q
-... | true = cong (_, s ⦂ S [ S≤x ]) (q-bounded-idem{Γ = Γ} refl)
-... | false
-  with eq1
-... | ()
--}
 
 <⦂-val-lift : ⟨ Σₕₛ ⟩⊢[ v ⦂ S₁ ] → S₁ <⦂ S₂ → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₂ ]
-<⦂-val-lift TVUnit (SUnit x) = TVUnit
-<⦂-val-lift TVCst (SBase x) = TVCst
-<⦂-val-lift (TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₁ wf₂ <⦂S₁) S₁<⦂S₂ = TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₁ wf₂ (<⦂-trans <⦂S₁ S₁<⦂S₂)
+<⦂-val-lift TVUnit (SQual qsub SUnit) = TVUnit
+<⦂-val-lift TVCst (SQual qsub SBase) = TVCst
+<⦂-val-lift (TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₂ <⦂S₁) S₁<⦂S₂ = TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₂ (<⦂-trans <⦂S₁ S₁<⦂S₂)
 <⦂-val-lift (TVRef ℓ< lkup≡ <⦂S₁) S₁<⦂S₂ = TVRef ℓ< lkup≡ (<⦂-trans <⦂S₁ S₁<⦂S₂)
 
 
@@ -688,7 +768,7 @@ data read : List Val → ℕ → Val → Set where
 
 data sread : Stack → ℕ → Val → Set where
 
-  sread0 : read vs ℓ v → sread (vs ∷ 𝓛) ℓ v
+  sread0 : read vs ℓ v → sread vs ℓ v
 
 data write : List Val → ℕ → Val → List Val → Set where
 
@@ -698,7 +778,7 @@ data write : List Val → ℕ → Val → List Val → Set where
 data swrite : Stack → ℕ → Val → Stack → Set where
 
   -- swrite0 : write vs ℓ v vs′ → swrite (vs ∷ 𝓛) ℓ v (vs′ ∷ 𝓛)
-  swrite0 : write (𝓢 .head) ℓ v vs′ → swrite 𝓢 ℓ v (vs′ ∷ 𝓢 .tail)
+  swrite0 : write 𝓢 ℓ v 𝓢′ → swrite 𝓢 ℓ v 𝓢′
 
 typed-read-aux : ∀ {q}{T : Type q}{Σₕ : List (Type q)}
   → Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ q) ] ) 𝓗 Σₕ
@@ -788,8 +868,37 @@ typed-swrite {Σₕₛ = Σₕₛ} ⊢𝓢 ℓ< lkup≡ ⊢v (swrite0 xwrite) = 
 ⊢𝓢-extend-𝟚-aux S ⊢v (x∼y ∷ pws) = ([⦂]-≼ (≼-extend-Σ 𝟚 S) x∼y) ∷ ⊢𝓢-extend-𝟚-aux S ⊢v pws
 
 ⊢𝓢-extend-𝟚 : (S : Type 𝟚) (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ (S ^ 𝟚) ]) (⊢𝓢 : Σₕₛ ⊢ₛ 𝓢)
-  → Pointwise (λ v S′ → ⟨ (extend-Σ Σₕₛ 𝟚 S) ⟩⊢[ v ⦂ (S′ ^ 𝟚)]) (𝓢 .head ++ [ v ]) (Σₕₛ 𝟚 ++ [ S ])
+  → Pointwise (λ v S′ → ⟨ (extend-Σ Σₕₛ 𝟚 S) ⟩⊢[ v ⦂ (S′ ^ 𝟚)]) (𝓢 ++ [ v ]) (Σₕₛ 𝟚 ++ [ S ])
 ⊢𝓢-extend-𝟚 S ⊢v ⊢𝓢 = ⊢𝓢-extend-𝟚-aux S ⊢v ⊢𝓢
+
+postulate
+  ⊢𝓢-revert-𝟚-value : ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
+    → (Σₛ : List (Type 𝟚))
+    → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ S ]
+
+⊢𝓗-revert-𝟚-env : ⟨ Σₕₛ′ , Γ ⟩⊨ 𝓔 / (𝓢 , σ) → (Σₛ : List (Type 𝟚))
+  → ⟨ adjust-stack Σₕₛ′ Σₛ , Γ ⟩⊨ 𝓔 / (take (length Σₛ) 𝓢 , σ)
+⊢𝓗-revert-𝟚-value : ⟨ Σₕₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ]
+  → (Σₛ : List (Type 𝟚))
+  → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ]
+
+⊢𝓗-revert-𝟚-env {𝓢 = 𝓢}{σ = σ} ⊨𝓔 Σₛ = mk-⊨ (λ x∈ x≢ → ⊢𝓗-revert-𝟚-value (⊨-heap ⊨𝓔 x∈ x≢) Σₛ)
+                                             (λ {s = s} x∈ v≡ → ⊢𝓢-revert-𝟚-value (⊨-stack ⊨𝓔 x∈ (↓-mono {n = length Σₛ}{xs = 𝓢}{mi = σ s} v≡)) Σₛ )
+
+⊢𝓗-revert-𝟚-value TVUnit Σₛ = TVUnit
+⊢𝓗-revert-𝟚-value TVCst Σₛ = TVCst
+⊢𝓗-revert-𝟚-value (TVClos ⊨𝓔 qbd ⊢e σ?≡ wf₂ <⦂S) Σₛ = TVClos (⊢𝓗-revert-𝟚-env ⊨𝓔 Σₛ) qbd ⊢e σ?≡ wf₂ <⦂S
+⊢𝓗-revert-𝟚-value (TVRef ℓ< lkup≡ (SQual ≤-refl <⦂′T)) Σₛ = TVRef ℓ< lkup≡ (SQual ≤-refl <⦂′T)
+
+⊢𝓗-revert-𝟚-aux : ∀ {Σₕ} {xs : List Val}
+  → Σₕₛ ≼ Σₕₛ′
+  → Pointwise (λ v T′ → ⟨ Σₕₛ′ ⟩⊢[ v ⦂ (T′ ^ 𝟙)]) xs Σₕ
+  → Pointwise (λ v T′ → ⟨ adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⟩⊢[ v ⦂ (T′ ^ 𝟙)]) xs Σₕ
+⊢𝓗-revert-𝟚-aux ≼Σ [] = []
+⊢𝓗-revert-𝟚-aux {Σₕₛ = Σₕₛ} ≼Σ (x∼y ∷ pws) = ⊢𝓗-revert-𝟚-value x∼y (Σₕₛ 𝟚) ∷ (⊢𝓗-revert-𝟚-aux ≼Σ pws)
+
+⊢𝓗-revert-𝟚 : Σₕₛ ≼ Σₕₛ′ → (⊢𝓗 : Σₕₛ′ ⊢ₕ 𝓗) → adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⊢ₕ 𝓗
+⊢𝓗-revert-𝟚 ≼Σ ⊢𝓗 = ⊢𝓗-revert-𝟚-aux ≼Σ ⊢𝓗
 
 -- -- UNSAFE --
 -- postulate
@@ -798,7 +907,7 @@ typed-swrite {Σₕₛ = Σₕₛ} ⊢𝓢 ℓ< lkup≡ ⊢v (swrite0 xwrite) = 
 ∣_∣ʰ = length
 
 ∣_∣ˢ : Stack → ℕ
-∣ (vs ∷ _) ∣ˢ = length vs
+∣_∣ˢ = length
 
 update : StackMap → Ident → ℕ → StackMap
 update σ x n = λ s → case (x ≟ s) of λ where
@@ -811,25 +920,21 @@ _⊕ₕ_ : Env → (Var × Val) → Env
 
 _⊕ₛ_ : (Stack × StackMap) → (Var × Val) → (Stack × StackMap)
 (𝓢 , σ) ⊕ₛ (X s 𝟙 , v) = (𝓢 , σ)
-((vs ∷ 𝓛) , σ) ⊕ₛ (X s 𝟚 , v) = (vs ++ [ v ]) ∷ 𝓛 , update σ s (length vs)
+(𝓢 , σ) ⊕ₛ (X s 𝟚 , v) = 𝓢 ++ [ v ] , update σ s (length 𝓢)
 
 alloc : Stack → Val → Stack × ℕ
-alloc (vs ∷ 𝓛) v = (vs ++ [ v ]) ∷ 𝓛 , length vs
+alloc 𝓢 v = 𝓢 ++ [ v ] , length 𝓢
 
-alloc-length : ∀ 𝓢 → length (alloc 𝓢 v .proj₁ .head) ≡ suc (length (𝓢 .head))
-alloc-length {v = v} 𝓢 = trans (length-++ (𝓢 .head) {[ v ]}) (trans (+-suc (length (𝓢 .head)) zero) (cong suc (+-identityʳ (length (𝓢 .head)))))
+alloc-length : ∀ 𝓢 → length (alloc 𝓢 v .proj₁) ≡ suc (length 𝓢)
+alloc-length {v = v} 𝓢 = trans (length-++ 𝓢 {[ v ]}) (trans (+-suc (length 𝓢) zero) (cong suc (+-identityʳ (length 𝓢))))
 
 -- ≲-alloc : 𝓢 ≲ alloc 𝓢 v .proj₁
 -- ≲-alloc {𝓢}{v} .proj₁ rewrite alloc-length {v} 𝓢 = n≤1+n _
 -- ≲-alloc {𝓢}{v} .proj₂ i S lkup = subst (λ □ → [ □ ⦂ S ]) (lookup-++ (𝓢 .head) [ v ] i) lkup
 
-push-𝟙 : (Stack × StackMap) → Maybe StackMap → (Stack × StackMap)
-push-𝟙 (𝓢 , _) (just σ) = 𝓢 , σ
-push-𝟙 (𝓢 , _) nothing = ([] ∷⁺ 𝓢) , const nothing
-
-push-𝟚 : (Stack × StackMap) → Maybe StackMap → (Stack × StackMap)
-push-𝟚 (𝓢 , _) (just σ) = 𝓢 , σ
-push-𝟚 (𝓢 , _) nothing  = 𝓢 , const nothing
+push : (Stack × StackMap) → Maybe StackMap → (Stack × StackMap)
+push (𝓢 , _) (just σ) = 𝓢 , σ
+push (𝓢 , _) nothing = 𝓢 , const nothing
 
 -- H,S ⊢ c ⇓q s c ⊣ S
 data _,_,_⊢_⇓[_]_⊣_,_
@@ -856,13 +961,14 @@ data _,_,_⊢_⇓[_]_⊣_,_
   EAppH :
          𝓔 , 𝓗  , (𝓢  , σ) ⊢ e₁ ⇓[ 𝟚  ] clos q 𝓔′ σ? (X s q₂) e 𝟙 ⊣ 𝓗′ , 𝓢′
        → 𝓔 , 𝓗′ , (𝓢′ , σ) ⊢ e₂ ⇓[ q₂ ] v₂ ⊣ 𝓗″ , 𝓢″
-       → (𝓔′ ⊕ₕ (X s q₂ , v₂)) , 𝓗″ , push-𝟙 (𝓢″ , σ) σ? ⊕ₛ (X s q₂ , v₂) ⊢ e ⇓[ 𝟙 ] v ⊣ 𝓗‴ , 𝓢‴
-       → 𝓔 , 𝓗 , (𝓢 , σ) ⊢ app e₁ e₂ ⇓[ 𝟙 ] v ⊣ 𝓗′ , 𝓢
+       → (𝓔′ ⊕ₕ (X s q₂ , v₂)) , 𝓗″ , push (𝓢″ , σ) σ? ⊕ₛ (X s q₂ , v₂) ⊢ e ⇓[ 𝟙 ] v ⊣ 𝓗‴ , 𝓢‴
+        ---------------------------------------------------------
+       → 𝓔 , 𝓗 , (𝓢 , σ) ⊢ app e₁ e₂ ⇓[ 𝟙 ] v ⊣ 𝓗‴ , 𝓢″
        
   EAppS :
          𝓔 , 𝓗 , (𝓢 , σ) ⊢ e₁ ⇓[ 𝟚 ] clos q 𝓔′ σ? (X s q₁) e q₂ ⊣ 𝓗′ , 𝓢′
        → 𝓔 , 𝓗′ , (𝓢′ , σ) ⊢ e₂ ⇓[ q₁ ] v₂ ⊣ 𝓗″ , 𝓢″
-       → (𝓔′ ⊕ₕ (X s q₁ , v₂)) , 𝓗″ , push-𝟚 (𝓢″ , σ) σ? ⊕ₛ (X s q₁ , v₂) ⊢ e ⇓[ q₂ ] v ⊣ 𝓗‴ , 𝓢‴
+       → (𝓔′ ⊕ₕ (X s q₁ , v₂)) , 𝓗″ , push (𝓢″ , σ) σ? ⊕ₛ (X s q₁ , v₂) ⊢ e ⇓[ q₂ ] v ⊣ 𝓗‴ , 𝓢‴
         ---------------------------------------------------------
        → 𝓔 , 𝓗 , (𝓢 , σ) ⊢ app e₁ e₂ ⇓[ 𝟚 ] v ⊣ 𝓗‴ , 𝓢‴
 
