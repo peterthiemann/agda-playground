@@ -57,47 +57,80 @@ eval-soundness {S = mkQ 𝟚 T} ⊢𝓗 ⊢𝓢 (TVar x) ⊨𝓔 ≤-q (EVarS ac
 
 ----- abstraction
 
-eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟙} ⊢e qbdd refl {wf₁}{wf₂}) ⊨𝓔 ≤-refl EAbsH
-  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl wf₁ wf₂ <⦂-refl , ⊢𝓗 , ⊢𝓢
+eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟙} ⊢e qbdd {wf₂}) ⊨𝓔 ≤-refl EAbsH
+  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl wf₂ <⦂-refl , ⊢𝓗 , ⊢𝓢
 -- why is the following case legal?
-eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟙} {S≤x = refl} ⊢e qbdd refl {≤-refl}{≤-refl}) ⊨𝓔 ≤-bottop EAbsS
-  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl ≤-refl ≤-refl <⦂-refl , ⊢𝓗 , ⊢𝓢
-eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟚} ⊢e qbdd refl {wf₁}{wf₂}) ⊨𝓔 ≤-refl EAbsS
-  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl wf₁ wf₂ <⦂-refl , ⊢𝓗 , ⊢𝓢
+eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟙} {S≤x = refl} ⊢e qbdd {≤-refl}) ⊨𝓔 ≤-bottop EAbsS
+  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl ≤-refl <⦂-refl , ⊢𝓗 , ⊢𝓢
+eval-soundness ⊢𝓗 ⊢𝓢 (TAbs {q = 𝟚} ⊢e qbdd{wf₂}) ⊨𝓔 ≤-refl EAbsS
+  = -, ≼-refl , TVClos (restrict′ ⊨𝓔 qbdd) (is-bounded qbdd) ⊢e refl wf₂ <⦂-refl , ⊢𝓗 , ⊢𝓢
 
 ----- application
 
+-- varying q and q₂ (as in X s q₂)
+
+{-
 eval-soundness ⊢𝓗 ⊢𝓢 (TApp {S₁ = S₁}{S₂ = S₂} ⊢e ⊢e₁) ⊨𝓔 ≤-refl (EAppH ⇓ ⇓₁ ⇓₂)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
-... | Σₕₛ′ , ≼Σ′ , TVClos {q = q}{x = X s q₂}{σ? = σ?}{S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ σ?≡ wf₁ wf₂ (SFun q1<=q2 <⦂Sarg <⦂Sres) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟚}{x = X s 𝟙}{σ? = σ?}{S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ σ?≡ wf₂ (SFun q1<=q2 <⦂Sarg <⦂Sres) , ⊢𝓗′ , ⊢𝓢′
   with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) (q-of-mono <⦂Sarg) ⇓₁
 ... | Σₕₛ″ , ≼Σ″ , ⊢varg , ⊢𝓗″ , ⊢𝓢″
-  with q , q₂
-... | 𝟚 , 𝟙 -- why do we have this case?
   with refl ← σ?≡
-  with ≤-refl ← wf₁
   with ≤-refl ← wf₂
   with eval-soundness ⊢𝓗″ {!!} ⊢e₂ {!!} (q-of-mono <⦂Sres) ⇓₂
 ... | Σₕₛ‴ , ≼Σ‴ , ⊢v , ⊢𝓗‴ , ⊢𝓢‴
   = Σₕₛ‴ , (≼-trans ≼Σ′ (≼-trans ≼Σ″ ≼Σ‴)) , {!⊢v!} , {!⊢𝓗‴!} , {!!}
 
 eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-refl (EAppH ⇓ ⇓₁ ⇓₂)
-    | Σₕₛ′ , ≼Σ′ , TVClos {q = q}{x = X s q₂}{σ? = σ?}{S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ σ?≡ wf₁ wf₂ (SFun q1<=q2 <⦂Sarg <⦂Sres) , ⊢𝓗′ , ⊢𝓢′
+    | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟙}{x = X s 𝟙}{σ? = σ?}{S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ σ?≡ wf₂ (SFun q1<=q2 <⦂Sarg <⦂Sres) , ⊢𝓗′ , ⊢𝓢′
     | Σₕₛ″ , ≼Σ″ , ⊢varg , ⊢𝓗″ , ⊢𝓢″
-    | 𝟙 , 𝟙
   with refl ← σ?≡
-  with ≤-refl ← wf₁
   with ≤-refl ← wf₂
-  with eval-soundness (⊢ₕ-adjust [] [] ⊢𝓗″) [] ⊢e₂ (⊨-adjust [] {!!}) (q-of-mono <⦂Sres) {!!} -- ⇓₂
+  with eval-soundness {!!} [] ⊢e₂ {!!} (q-of-mono <⦂Sres) {!!} -- ⇓₂
 ... | Σₕₛ‴ , ≼Σ‴ , ⊢v , ⊢𝓗‴ , ⊢𝓢‴
    = {!!} , {!!} , {!!} , {!!} , {!!}
+-}
 
-eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-q (EAppS ⇓ ⇓₁ ⇓₂) = {!!}
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-q (EAppH ⇓ ⇓₁ ⇓₂)
+  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-refl (EAppH {𝓢″ = 𝓢″} ⇓ ⇓₁ ⇓₂)
+  | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟙} {x = X s q₁′} {σ? = nothing} {S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ refl ≤-refl (SQual q1<=q2 (SFun {S₃ = S₃@ (T₃ ^ 𝟙)}{S₁ = S₁@ (T₁ ^ 𝟙)}{S₂ = S₂}{S₄ = S₄} <⦂Sarg <⦂Sres)) , ⊢𝓗′ , ⊢𝓢′
+  with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) (q-of-mono <⦂Sarg) ⇓₁
+... | Σₕₛ″ , ≼Σ″ , ⊢varg , ⊢𝓗″ , ⊢𝓢″
+  with eval-soundness ⊢𝓗″ ⊢𝓢″ ⊢e₂ (⊨-extend-𝟙 s T₁ (<⦂-val-lift ⊢varg <⦂Sarg) {!⊨-extend-Σ ≼Σ″ ⊨𝓔′!}) (q-of-mono <⦂Sres) ⇓₂
+... | Σₕₛ‴ , ≼Σ‴ , ⊢vres , ⊢𝓗‴ , ⊢𝓢‴
+  using ≼Σ₁₂ ← ≼-trans ≼Σ′ ≼Σ″
+  = adjust-stack Σₕₛ‴ (Σₕₛ″ 𝟚)
+  , ≼-trans ≼Σ₁₂ (≼-adjust ≼Σ‴)
+  , (<⦂-val-lift (⊢ᵥ-adjust ⊢vres) <⦂Sres)
+  , ⊢ₕ-adjust (Σₕₛ″ 𝟚) (⊢ₛ-adjust ≼Σ‴ ⊢𝓢″) ⊢𝓗‴
+  , {!⊢vres!} -- ⊢ₛ-adjust ≼Σ‴ ⊢𝓢″
+
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-refl (EAppH ⇓ ⇓₁ ⇓₂)
+  | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟙} {x = X s q₁′} {σ? = nothing} {S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ refl ≤-refl (SQual q1<=q2 (SFun {S₃ = S₃@ (T₃ ^ 𝟙)}{S₁ = S₁@ (T₁ ^ 𝟚)}{S₂ = S₂}{S₄ = S₄} <⦂Sarg <⦂Sres)) , ⊢𝓗′ , ⊢𝓢′
+  with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) (q-of-mono <⦂Sarg) ⇓₁
+... | Σₕₛ″ , ≼Σ″ , ⊢varg , ⊢𝓗″ , ⊢𝓢″
+  = {!eval-soundness ⊢𝓗″ ⊢𝓢″ ⊢e₂!}
+
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp {S₁ = S₁@ (T₁ ^ 𝟚)}{S₂ = S₂} ⊢e ⊢e₁) ⊨𝓔 ≤-refl (EAppH ⇓ ⇓₁ ⇓₂)
+  | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟙} {x = X s q₁′} {σ? = nothing} {S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ refl wf₂ (SQual q1<=q2 (SFun{S₃ = S₃@ (T₃ ^ 𝟚)}{S₄ = S₄} <⦂Sarg <⦂Sres)) , ⊢𝓗′ , ⊢𝓢′
+  with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) (q-of-mono <⦂Sarg) ⇓₁
+... | Σₕₛ″ , ≼Σ″ , ⊢varg , ⊢𝓗″ , ⊢𝓢″
+  = {!!}
+
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-q (EAppH ⇓ ⇓₁ ⇓₂)
+  | Σₕₛ′ , ≼Σ′ , TVClos {q = 𝟚} {x = X s q₂} {σ? = σ?} {S₁≤x = refl} ⊨𝓔′ qbd ⊢e₂ σ?≡ wf₂ (SQual q1<=q2 (SFun <⦂Sarg <⦂Sres)) , ⊢𝓗′ , ⊢𝓢′ = {!!}
+
+eval-soundness ⊢𝓗 ⊢𝓢 (TApp ⊢e ⊢e₁) ⊨𝓔 ≤-q (EAppS ⇓ ⇓₁ ⇓₂)
+  = {!!}
+
 
 ----- sequence
 
-eval-soundness ⊢𝓗 ⊢𝓢 (TSeq q1≤q2 ⊢e ⊢e₁ q₁≤S) ⊨𝓔 ≤-q (ESeq ⇓ ⇓₁)
+eval-soundness ⊢𝓗 ⊢𝓢 (TSeq ⊢e ⊢e₁) ⊨𝓔 ≤-q (ESeq ⇓ ⇓₁)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-top ⇓
+... | Σₕₛ′ , ≼Σ′ , TVClos x x₁ x₂ x₃ wf₂ (SQual qsub ()) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< x (SQual qsub ()) , ⊢𝓗′ , ⊢𝓢′
 ... | Σₕₛ′ , ≼Σ′ , TVUnit , ⊢𝓗′ , ⊢𝓢′
   with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) ≤-q ⇓₁
 ... | Σₕₛ″ , ≼Σ″ , ⊢v , ⊢𝓗″ , ⊢𝓢″
@@ -105,54 +138,50 @@ eval-soundness ⊢𝓗 ⊢𝓢 (TSeq q1≤q2 ⊢e ⊢e₁ q₁≤S) ⊨𝓔 ≤-
 
 ----- ref
 
-eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@(T ^ 𝟙)} ⊢e qbdd {≤-refl}) ⊨𝓔 ≤-refl (ERefH {𝓢′ = 𝓢′} ⇓)
-  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e (restrict′ ⊨𝓔 qbdd) ≤-refl ⇓
+eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@(T ^ 𝟙)} {wf = ≤-refl} ⊢e) ⊨𝓔 ≤-refl (ERefH {𝓢′ = 𝓢′} ⇓)
+  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
 ... | Σₕₛ′ , ≼Σ′ , ⊢v , ⊢𝓗′ , ⊢𝓢′
   rewrite sym (⊢ₕ-length ⊢𝓗′)
   = extend-Σ Σₕₛ′ 𝟙 T , ≼-trans ≼Σ′ (≼-extend-Σ 𝟙 T) , TVRef (length-< T (Σₕₛ′ 𝟙) []) (lookup-last T (Σₕₛ′ 𝟙)) <⦂-refl , ⊢𝓗-extend-𝟙 _ ⊢v ⊢𝓗′ , ⊢𝓢-extend-𝟙 {𝓢 = 𝓢′} T ⊢𝓢′
-eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@ (T ^ 𝟙)} {q = 𝟙} ⊢e qbdd {≤-refl}) ⊨𝓔 ≤-top (ERefS {q = q} {𝓢′ = 𝓢′} ⇓ q=1 q=2)
-  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e (restrict′ ⊨𝓔 qbdd) ≤-refl ⇓
+eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@ (T ^ 𝟙)} {q = 𝟙} {wf = ≤-refl} ⊢e) ⊨𝓔 ≤-top (ERefS {q = q} {𝓢′ = 𝓢′} ⇓ q=1 q=2)
+  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
 ... | Σₕₛ′ , ≼Σ′ , ⊢v , ⊢𝓗′ , ⊢𝓢′
   with refl , refl , refl ← q=1 refl
   rewrite sym (⊢ₕ-length ⊢𝓗′)
  = extend-Σ Σₕₛ′ 𝟙 T , ≼-trans ≼Σ′ (≼-extend-Σ 𝟙 T) , TVRef (length-< T (Σₕₛ′ 𝟙) []) (lookup-last T (Σₕₛ′ 𝟙)) <⦂-refl , ⊢𝓗-extend-𝟙 _ ⊢v ⊢𝓗′ , ⊢𝓢-extend-𝟙 {𝓢 = 𝓢′} T ⊢𝓢′
-eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@(T ^ 𝟚)} {q = 𝟚} ⊢e qbdd {≤-refl}) ⊨𝓔 ≤-top (ERefS {q = q} {𝓢′ = 𝓢′} ⇓ q=1 q=2)
-  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e (restrict′ ⊨𝓔 qbdd) ≤-refl ⇓
+eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S@(T ^ 𝟚)} {q = 𝟚} {wf = ≤-refl} ⊢e) ⊨𝓔 ≤-top (ERefS {q = q} {𝓢′ = 𝓢′} ⇓ q=1 q=2)
+  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
 ... | Σₕₛ′ , ≼Σ′ , ⊢v , ⊢𝓗′ , ⊢𝓢′
   with refl , refl ← q=2 refl
   rewrite sym (⊢ₛ-length {𝓢 = 𝓢′} ⊢𝓢′)
  = extend-Σ Σₕₛ′ 𝟚 T , ≼-trans ≼Σ′ (≼-extend-Σ 𝟚 T) , TVRef (length-< T (Σₕₛ′ 𝟚) []) (lookup-last T (Σₕₛ′ 𝟚)) <⦂-refl , ⊢𝓗-extend-𝟚 T ⊢𝓗′ , ⊢𝓢-extend-𝟚 {𝓢 = 𝓢′} T ⊢v ⊢𝓢′
+eval-soundness ⊢𝓗 ⊢𝓢 (TRef {S = S} {q = q} ⊢e) ⊨𝓔 ≤-refl (ERefS {𝓢′ = 𝓢′} ⇓ q=1 q=2)
+  = {!!}
+
 
 ----- deref
 
 eval-soundness ⊢𝓗 ⊢𝓢 (TDeref ⊢e) ⊨𝓔 ≤-refl (EDerefH ⇓ xread)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef ≤-refl S<⦂ <⦂S) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SQual ≤-refl (SRef S<⦂ <⦂S)) , ⊢𝓗′ , ⊢𝓢′
   with refl ← <⦂-antisym S<⦂ <⦂S
   = Σₕₛ′ , ≼Σ′ , typed-read ⊢𝓗′ ℓ< lkup≡ xread , ⊢𝓗′ , ⊢𝓢′
 eval-soundness ⊢𝓗 ⊢𝓢 (TDeref {q = 𝟚} ⊢e) ⊨𝓔 ≤-q (EDerefS ⇓ q=1 q=2)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef ≤-bottop S<⦂ <⦂S) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SQual ≤-bottop (SRef S<⦂ <⦂S)) , ⊢𝓗′ , ⊢𝓢′
   with xread ← q=1 refl
   with refl ← <⦂-antisym  S<⦂ <⦂S
   = Σₕₛ′ , ≼Σ′ , typed-read ⊢𝓗′ ℓ< lkup≡ xread , ⊢𝓗′ , ⊢𝓢′
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef ≤-refl S<⦂ <⦂S) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SQual ≤-refl (SRef S<⦂ <⦂S)) , ⊢𝓗′ , ⊢𝓢′
   with xsread ← q=2 refl
   with refl ← <⦂-antisym  S<⦂ <⦂S
   = Σₕₛ′ , ≼Σ′ , typed-sread ⊢𝓢′ ℓ< lkup≡ xsread , ⊢𝓗′ , ⊢𝓢′
 
 ----- setref
 
-eval-soundness ⊢𝓗 ⊢𝓢 (TSetref ⊢e ⊢e₁) ⊨𝓔 ≤-refl (ESetrefH ⇓ ⇓₁ xwrite)
-  with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-refl ⇓
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef ≤-refl S<⦂ <⦂S {wf₁}) , ⊢𝓗′ , ⊢𝓢′
-  with refl ← <⦂-antisym S<⦂ <⦂S
-  with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) wf₁ ⇓₁
-... | Σₕₛ″ , ≼Σ″ , ⊢v , ⊢𝓗″ , ⊢𝓢″
-  = Σₕₛ″ , (≼-trans ≼Σ′ ≼Σ″) , TVUnit , typed-write ⊢𝓗″ (≤ℕ-trans ℓ< (≼⇒length ≼Σ″ 𝟙)) (trans (trans (cong (lookup (Σₕₛ″ 𝟙)) (fromℕ-inject≤ (≼⇒length ≼Σ″ 𝟙) ℓ<)) (sym (≼-lookup ≼Σ″ 𝟙 (fromℕ< ℓ<)))) lkup≡) ⊢v xwrite , ⊢𝓢″
 eval-soundness ⊢𝓗 ⊢𝓢 (TSetref ⊢e ⊢e₁) ⊨𝓔 ≤-q (ESetrefS {q = 𝟙} ⇓ ⇓₁ q=1 q=2)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-top ⇓
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef _ <⦂S S<⦂ {wf₁}) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SQual _ (SRef {wf₁ = wf₁} <⦂S S<⦂)) , ⊢𝓗′ , ⊢𝓢′
   with refl ← <⦂-antisym  S<⦂ <⦂S
   with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) wf₁ ⇓₁
 ... | Σₕₛ″ , ≼Σ″ , ⊢v , ⊢𝓗″ , ⊢𝓢″
@@ -160,7 +189,7 @@ eval-soundness ⊢𝓗 ⊢𝓢 (TSetref ⊢e ⊢e₁) ⊨𝓔 ≤-q (ESetrefS {q
   = Σₕₛ″ , (≼-trans ≼Σ′ ≼Σ″) , TVUnit , typed-write ⊢𝓗″ (≤ℕ-trans ℓ< (≼⇒length ≼Σ″ 𝟙)) (trans (trans (cong (lookup (Σₕₛ″ 𝟙)) (fromℕ-inject≤ (≼⇒length ≼Σ″ 𝟙) ℓ<)) (sym (≼-lookup ≼Σ″ 𝟙 (fromℕ< ℓ<)))) lkup≡) ⊢v xwrite , ⊢𝓢″
 eval-soundness ⊢𝓗 ⊢𝓢 (TSetref ⊢e ⊢e₁) ⊨𝓔 ≤-q (ESetrefS {q = 𝟚} ⇓ ⇓₁ q=1 q=2)
   with eval-soundness ⊢𝓗 ⊢𝓢 ⊢e ⊨𝓔 ≤-top ⇓
-... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SRef _ <⦂S S<⦂ {wf₁}) , ⊢𝓗′ , ⊢𝓢′
+... | Σₕₛ′ , ≼Σ′ , TVRef ℓ< lkup≡ (SQual _ (SRef {wf₁ = wf₁} <⦂S S<⦂)) , ⊢𝓗′ , ⊢𝓢′
   with refl ← <⦂-antisym  S<⦂ <⦂S
   with eval-soundness ⊢𝓗′ ⊢𝓢′ ⊢e₁ (eval-preservation ⊢e (⊨-extend-Σ ≼Σ′ ⊨𝓔) ⇓) wf₁ ⇓₁
 ... | Σₕₛ″ , ≼Σ″ , ⊢v , ⊢𝓗″ , ⊢𝓢″
