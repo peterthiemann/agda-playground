@@ -3,9 +3,11 @@ module Syntax where
 
 open import Data.Empty using (⊥)
 open import Data.Unit using (⊤; tt)
-open import Data.Nat using (ℕ)
+open import Data.Nat using (ℕ; _+_)
+open import Data.Nat.Properties using (+-identityʳ)
 open import Data.Fin using (Fin)
-open import Data.Product using (_×_)
+open import Data.Product using (_×_; proj₁; proj₂; _,_)
+open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Function using (_∘_)
 
 import Relation.Binary.PropositionalEquality as Eq
@@ -14,7 +16,7 @@ open Eq using (_≡_; refl; trans; sym; cong; cong₂; cong-app; subst)
 postulate
   funext : {A B : Set}{f g : A → B} → (∀ x → f x ≡ g x) → f ≡ g
 
-variable n : ℕ
+variable m n o : ℕ
 
 data Dir : Set where
   Left Right Unord : Dir
@@ -115,6 +117,55 @@ dual-involutive Return = refl
 dual-involutive Acq = refl
 
 -- contexts and patterns
+
+module alternative where
+
+  m+n≡0 : m + n ≡ 0 → m ≡ 0 × n ≡ 0
+  m+n≡0 {ℕ.zero} {n} eq = refl , eq
+
+  m+n≡1 : m + n ≡ 1 → m ≡ 1 × n ≡ 0 ⊎ m ≡ 0 × n ≡ 1
+  m+n≡1 {ℕ.zero} {n} eq = inj₂ (refl , eq)
+  m+n≡1 {ℕ.suc ℕ.zero} {n} refl = inj₁ (refl , refl)
+
+  data Context : ℕ → Set where
+    ∅ : Context 0
+    $[_] : Type → Context 0
+    ⟪⟫ : Context 1
+    _⨾_ : Context m → Context n → {p : m + n ≡ o} → Context o
+    _∥_ : Context m → Context n → {p : m + n ≡ o} → Context o
+  
+  is-null-context : Context 0 → Set
+  is-null-context ∅ = ⊤
+  is-null-context $[ x ] = ⊥
+  is-null-context (_⨾_ {m}{n} Γ Γ₁ {eq})
+    rewrite m+n≡0{m} eq .proj₁ | m+n≡0{m} eq .proj₂
+    = is-null-context Γ × is-null-context Γ₁
+  is-null-context (_∥_ {m} Γ Γ₁ {eq})
+    rewrite m+n≡0{m} eq .proj₁ | m+n≡0{m} eq .proj₂
+    = is-null-context Γ × is-null-context Γ₁
+
+  is-left-pattern : Context 1 → Set
+  is-left-pattern ⟪⟫ = ⊤
+  is-left-pattern (_⨾_ {m} Γ Γ₁ {eq})
+    with m+n≡1{m} eq
+  ... | inj₁ (refl , refl) = is-left-pattern Γ
+  ... | inj₂ (refl , refl) = is-null-context Γ × is-left-pattern Γ₁
+  is-left-pattern (_∥_ {m} Γ Γ₁ {eq})
+    with m+n≡1{m} eq
+  ... | inj₁ (refl , refl) = is-left-pattern Γ
+  ... | inj₂ (refl , refl) = is-left-pattern Γ₁
+
+  _↓_ : Context 1 → Context m → Context m
+  ⟪⟫ ↓ Γ₁ = Γ₁
+  (_⨾_ {m} Γ  Γ₂ {eq}) ↓ Γ₁
+    with m+n≡1{m} eq
+  ... | inj₁ (refl , refl) = ((Γ ↓ Γ₁) ⨾ Γ₂) {+-identityʳ _}
+  ... | inj₂ (refl , refl) = (Γ ⨾ (Γ₂ ↓ Γ₁)) {refl}
+  (_∥_ {m} Γ  Γ₂ {eq}) ↓ Γ₁
+    with m+n≡1{m} eq
+  ... | inj₁ (refl , refl) = ((Γ ↓ Γ₁) ∥ Γ₂) {+-identityʳ _}
+  ... | inj₂ (refl , refl) = (Γ ∥ (Γ₂ ↓ Γ₁)) {refl}
+
 
 data Context : Set where
   ∅ : Context
