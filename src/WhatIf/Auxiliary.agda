@@ -8,6 +8,7 @@ open import Data.List using (List; []; _∷_; [_]; _++_; length; lookup; map; ta
 open import Data.List.Properties using (length-++; ++-identityʳ; ++-assoc)
 
 open import Data.Product using (∃-syntax; _,_)
+open import Data.Sum using (_⊎_; inj₁; inj₂)
 
 import Relation.Binary.PropositionalEquality as Eq
 open Eq using (_≡_; _≢_; refl; sym; trans; subst; cong; cong₂; dcong)
@@ -34,43 +35,62 @@ fromℕ-inject≤ {m} {suc n} {suc i} (s≤s n≤m) (s≤s i<) = cong suc (from�
 
 -- List lemmas
 
-length-≤ : ∀ {a}{A : Set a} (xs ys : List A) → length xs ≤ℕ length (xs ++ ys)
-length-≤ [] ys = z≤n
-length-≤ (x ∷ xs) ys = s≤s (length-≤ xs ys)
+module _ {a}{A : Set a} where
 
-lookup-++ : ∀ {a} {A : Set a} → (xs ys : List A) → (i : Fin (length xs))
-  → lookup xs i ≡ lookup (xs ++ ys) (inject≤ i (≤ℕ-trans (m≤m+n (length xs) (length ys)) (≡⇒≤ (sym (length-++ xs)))))
-lookup-++ (x ∷ xs) ys zero = refl
-lookup-++ (x ∷ xs) ys (suc i) = lookup-++ xs ys i
+  length-≤ : ∀ (xs ys : List A) → length xs ≤ℕ length (xs ++ ys)
+  length-≤ [] ys = z≤n
+  length-≤ (x ∷ xs) ys = s≤s (length-≤ xs ys)
 
-length-< : ∀ {a} {A : Set a} → (y : A) (xs ys : List A) → length xs < length (xs ++ (y ∷ ys))
-length-< y [] ys = s≤s z≤n
-length-< y (x ∷ xs) ys = s≤s (length-< y xs ys)
+  lookup-++ : ∀ (xs ys : List A) → (i : Fin (length xs))
+    → lookup xs i ≡ lookup (xs ++ ys) (inject≤ i (≤ℕ-trans (m≤m+n (length xs) (length ys)) (≡⇒≤ (sym (length-++ xs)))))
+  lookup-++ (x ∷ xs) ys zero = refl
+  lookup-++ (x ∷ xs) ys (suc i) = lookup-++ xs ys i
 
-lookup-last : ∀ {a} {A : Set a} → (y : A) (xs : List A) → lookup (xs ++ [ y ]) (fromℕ< (length-< y xs [])) ≡ y
-lookup-last y [] = refl
-lookup-last y (x ∷ xs) = lookup-last y xs
+  length-< : ∀  (y : A) (xs ys : List A) → length xs < length (xs ++ (y ∷ ys))
+  length-< y [] ys = s≤s z≤n
+  length-< y (x ∷ xs) ys = s≤s (length-< y xs ys)
 
-lookup-from-i : ∀ {a}{A : Set a} (xs : List A) {ys : List A} {i}
-  → (i< : i < length xs)
-  → lookup (xs ++ ys) (fromℕ< (≤ℕ-trans i< (length-≤ xs ys))) ≡ lookup xs (fromℕ< i<)
-lookup-from-i (x ∷ xs) {i = zero} i< = refl
-lookup-from-i (x ∷ xs) {i = suc i} (s≤s i<) = lookup-from-i xs i<
+  lookup-last : ∀ (y : A) (xs : List A) → lookup (xs ++ [ y ]) (fromℕ< (length-< y xs [])) ≡ y
+  lookup-last y [] = refl
+  lookup-last y (x ∷ xs) = lookup-last y xs
 
-lookup-from-i′ : ∀ {a}{A : Set a} (xs : List A) {ys zs : List A} {i}
-  → (i< : i < length xs)
-  → (eq : xs ++ ys ≡ zs)
-  → lookup zs (fromℕ< (≤ℕ-trans i< (subst (λ zs → length xs ≤ℕ length zs) eq (length-≤ xs ys)))) ≡ lookup xs (fromℕ< i<)
-lookup-from-i′ xs i< refl = lookup-from-i xs i<
+  lookup-from-i : ∀ (xs : List A) {ys : List A} {i}
+    → (i< : i < length xs)
+    → lookup (xs ++ ys) (fromℕ< (≤ℕ-trans i< (length-≤ xs ys))) ≡ lookup xs (fromℕ< i<)
+  lookup-from-i (x ∷ xs) {i = zero} i< = refl
+  lookup-from-i (x ∷ xs) {i = suc i} (s≤s i<) = lookup-from-i xs i<
 
--- List prefixes (unused)
+  lookup-from-i′ : ∀ (xs : List A) {ys zs : List A} {i}
+    → (i< : i < length xs)
+    → (eq : xs ++ ys ≡ zs)
+    → lookup zs (fromℕ< (≤ℕ-trans i< (subst (λ zs → length xs ≤ℕ length zs) eq (length-≤ xs ys)))) ≡ lookup xs (fromℕ< i<)
+  lookup-from-i′ xs i< refl = lookup-from-i xs i<
 
-_≼_ : ∀ {a}{A : Set a} → List A → List A → Set a
-xs ≼ xs′ = ∃[ ys ] xs ++ ys ≡ xs′
+  <-decomp : ∀ (xs : List A) (y : A) → ∀ {i} → i < length (xs ++ [ y ]) → i < length xs ⊎ i ≡ length xs
+  <-decomp [] y {i} (s≤s z≤n) = inj₂ refl
+  <-decomp (x ∷ xs) y {zero} (s≤s i<) = inj₁ (s≤s z≤n)
+  <-decomp (x ∷ xs) y {suc i} (s≤s i<)
+    with <-decomp xs y i<
+  ... | inj₁ i<len = inj₁ (s≤s i<len)
+  ... | inj₂ i≡len = inj₂ (cong suc i≡len)
 
-≼-refl : ∀ {a}{A : Set a}{xs : List A} → xs ≼ xs
-≼-refl {xs = xs} = [] , ++-identityʳ xs
+-- List prefixes
 
-≼-trans : ∀ {a}{A : Set a}{xs xs′ xs″ : List A} → xs ≼ xs′ → xs′ ≼ xs″ → xs ≼ xs″
-≼-trans {xs = xs} (ys1 , eq1) (ys2 , eq2) rewrite sym eq2 | sym eq1 = (ys1 ++ ys2) , sym (++-assoc xs ys1 ys2)
+module _ {a}{A : Set a} where
 
+  _≼_ : List A → List A → Set a
+  xs ≼ xs′ = ∃[ ys ] xs ++ ys ≡ xs′
+
+  ≼-refl : ∀ {xs : List A} → xs ≼ xs
+  ≼-refl {xs = xs} = [] , ++-identityʳ xs
+
+  ≼-trans : ∀ {xs xs′ xs″ : List A} → xs ≼ xs′ → xs′ ≼ xs″ → xs ≼ xs″
+  ≼-trans {xs = xs} (ys1 , eq1) (ys2 , eq2) rewrite sym eq2 | sym eq1 = (ys1 ++ ys2) , sym (++-assoc xs ys1 ys2)
+
+  ≼⇒length : ∀ {xs xs′ : List A} → xs ≼ xs′ → length xs ≤ℕ length xs′
+  ≼⇒length {xs} (ys , refl) = length-≤ xs ys
+
+  ≼-lookup : ∀ {xs xs′ : List A} → (xs≼ : xs ≼ xs′) → (i : Fin (length xs)) → lookup xs i ≡ lookup xs′ (inject≤ i (≼⇒length xs≼))
+  ≼-lookup {xs = xs}{xs′ = xs′} xs≼ i
+    with xs≼
+  ... | ys , refl = lookup-++ xs ys  i
