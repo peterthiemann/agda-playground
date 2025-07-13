@@ -165,6 +165,9 @@ variable
 push : Stack → Val → Stack
 push (mkS vars refs) v = mkS (vars ++ [ v ]) refs
 
+push-refs-≡ : push 𝓢 v .refs ≡ 𝓢 .refs
+push-refs-≡ = refl
+
 -- allocate a reference on the stack
 
 push-refs : Stack → List Val → Stack
@@ -831,18 +834,22 @@ _,_⊢ₛ_ : HType → SType → Stack → Set
 ⊢ₛ-adjust-≼ₕ ≼Σ ⊢𝓢 = ⊢ₛ-adjust-aux-≼ₕ ≼Σ ⊢𝓢
 
 {- needed?
+⊢ᵥ-adjust-push : ∀ {Σᵣ}
+  → (vs : List Val)
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S₀ ]
+  → ⟨ Σₕ , (Σₛ ++ Σᵣ)  ⟩⊢[ v ⦂ S₀ ]
 
--- ⊢ᵥ-adjust-push : ∀ {Σₛ}
---   → (vs : List Val)
---   → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₀ ]
---   → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ Σₛ)  ⟩⊢[ v ⦂ S₀ ]
+⊨-adjust-push : ∀ {vs}{Σᵣ}
+  → (⊨𝓔 : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢)
+  → ⟨ Σₕ , (Σₛ ++ Σᵣ) , Γ ⟩⊨ 𝓔 / mkS (𝓢 .vars ++ vs) (𝓢 .refs)
 
--- ⊨-adjust-push : ∀ {vs}{Σₛ}
---   → (⊨𝓔   : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢)
---   → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ Σₛ) , Γ ⟩⊨ 𝓔 / mkS (𝓢 .vars) (𝓢 .refs ++ vs)
+⊢ᵥ-adjust-push vs TVUnit = TVUnit
+⊢ᵥ-adjust-push vs TVCst = TVCst
+⊢ᵥ-adjust-push vs (TVClos {q = 𝟙} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → {!(∀⊨𝓔 𝓢′ 𝓢≼)!}) {!!} {!!} {!!} {!!} {!!} {!!}
+⊢ᵥ-adjust-push vs (TVClos {q = 𝟚} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = {!!}
+⊢ᵥ-adjust-push vs (TVRef {𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢ᵥ-adjust-push {Σₛ = Σₛ}{Σᵣ = Σᵣ} vs (TVRef {𝟚} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (length-≤ Σₛ Σᵣ)) (trans (lookup-from-i Σₛ ℓ<) lkup≡) <⦂S
 
--- ⊢ᵥ-adjust-push vs TVUnit = TVUnit
--- ⊢ᵥ-adjust-push vs TVCst = TVCst
 -- -- ⊢ᵥ-adjust-push vs (TVClos {𝓢′ = 𝓢′}{q = 𝟙} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
 -- --   = TVClos (⊨-adjust-push {vs = vs} ⊨𝓔) (≼ₛ-trans{mkS [] []}{𝓢′}{push-refs 𝓢′ vs} (≼ₛ-bot 𝓢′) (≼ₛ-extend{𝓢′} vs)) refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
 -- ⊢ᵥ-adjust-push vs (TVClos{q = 𝟙} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
@@ -860,33 +867,32 @@ _,_⊢ₛ_ : HType → SType → Stack → Set
 --                  in  v , acc , ⊢ᵥ-adjust ⊢v)
 --          (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈
 --                  in  a , sa , v , trans (↓′-mono {𝓢 .vars} {[]} a eq) (cong (_↓′ a) (++-identityʳ (𝓢 .vars))) , ⊢ᵥ-adjust-push vs ⊢v)
-
--- ⊢ₛ-adjust-aux-push : ∀ {Σₛ}
---   (xs : List Val)
---   → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₀ ]
---   → Pointwise ⟨ Σₕₛ ⟩⊢[_⦂_] vs Σₛ
---   → Pointwise ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ S₀ ]) ⟩⊢[_⦂_] (vs ++ [ v ]) (Σₛ ++ [ S₀ ])
--- ⊢ₛ-adjust-aux-push xs ⊢v [] = (⊢ᵥ-adjust-push xs ⊢v) ∷ []
--- ⊢ₛ-adjust-aux-push xs ⊢v (x∼y ∷ pws) = ⊢ᵥ-adjust-push xs x∼y ∷ ⊢ₛ-adjust-aux-push xs ⊢v pws
-
--- ⊢ₛ-adjust-push :
---   ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
---   → Σₕₛ ⊢ₛ 𝓢
---   → adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ S ]) ⊢ₛ (mkS (𝓢 .vars) (𝓢 .refs ++ [ v ]))
--- ⊢ₛ-adjust-push {𝓢 = 𝓢} ⊢v ⊢𝓢 = ⊢ₛ-adjust-aux-push (𝓢 .refs) ⊢v ⊢𝓢
-
-
--- ⊨-adjust-push-update : ∀ s
---   → ⟨ Σₕₛ ⟩⊢[ v₀ ⦂ (T ^ 𝟚) ]
---   → (⊨𝓔   : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢)
---   → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ (T ^ 𝟚) ]) , (Γ , X s 𝟚 ⦂ (T ^ 𝟚) [ refl ]) ⟩⊨ ⟨ s ⇒ length (𝓢 .vars) , 𝓔 ⟩ / mkS (𝓢 .vars ++ [ v₀ ]) (𝓢 .refs)
-
--- ⊨-adjust-push-update {Σₕₛ = Σₕₛ} {v₀ = v₀}{T = T} {𝓢 = 𝓢} s′ ⊢v₀ ⊨𝓔
---   = mk-⊨ (λ{ (there x∈ x≢) → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , skip acc (x≢ ∘ sym) , ⊢ᵥ-adjust-push [ v₀ ] ⊢v})
---          (λ{ here → length (𝓢 .vars) , here , v₀ , ↓′-last (𝓢 .vars) , (⊢ᵥ-adjust-push [ v₀ ] ⊢v₀)
---            ; (there x∈ x≢) → let a , acc , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , there acc (x≢ ∘ sym) , v , ↓′-mono {vs = 𝓢 .vars} {vs′ = [ v₀ ]} a eq , ⊢ᵥ-adjust-push [ v₀ ] ⊢v})
-
 -}
+
+{-
+⊢ₛ-adjust-aux-push : ∀ {Σᵣ}
+  (xs : List Val)
+  → Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+  → Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+⊢ₛ-adjust-aux-push xs [] = {!!}
+⊢ₛ-adjust-aux-push xs (x∼y ∷ pws) = {!!} ∷ ⊢ₛ-adjust-aux-push xs pws
+-}
+
+⊢ₛ-adjust-push : ∀ {vs}
+  → Σₕ , Σₛ ⊢ₛ 𝓢
+  → Σₕ , Σₛ ⊢ₛ mkS (𝓢 .vars ++ vs) (𝓢 .refs)
+⊢ₛ-adjust-push {𝓢 = 𝓢} ⊢𝓢 = ⊢𝓢
+
+
+⊨-adjust-push-update : ∀ {S₁≤x} s
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v₀ ⦂ S ]
+  → (⊨𝓔   : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢)
+  → ⟨ Σₕ , Σₛ , (Γ , X s 𝟚 ⦂ S [ S₁≤x ]) ⟩⊨ ⟨ s ⇒ length (𝓢 .vars) , 𝓔 ⟩ / mkS (𝓢 .vars ++ [ v₀ ]) (𝓢 .refs)
+
+⊨-adjust-push-update  {v₀ = v₀}{𝓢 = 𝓢} s ⊢v₀ ⊨𝓔
+  = mk-⊨ (λ{ (there x∈ x≢) → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , skip acc (x≢ ∘ sym) , ⊢v })
+         (λ{ here → length (𝓢 .vars) , here , v₀ , ↓′-last (𝓢 .vars) , ⊢v₀
+           ; (there x∈ x≢) → let a , acc , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , there acc (x≢ ∘ sym) , v , ↓′-mono {vs = 𝓢 .vars} {vs′ = [ v₀ ]} a eq , ⊢v })
 
 -- value typing extends
 
@@ -1149,10 +1155,11 @@ _⊕_ : Env → (Var × Val × Address) → Env
 _⊕ₛ_ : Stack → (Var × Val) → Stack
 𝓢 ⊕ₛ (X s 𝟙 , v) = 𝓢
 𝓢 ⊕ₛ (X s 𝟚 , v) = push 𝓢 v
-{-
-alloc : Stack → Val → Stack × ℕ
-alloc 𝓢 v = push 𝓢 v , ∣ 𝓢 ∣ˢ
 
+valloc : Stack → Val → Stack × ℕ
+valloc 𝓢 v = push 𝓢 v , ∣ 𝓢 ∣ˢ
+
+{-
 alloc-length : ∀ 𝓢 → ∣ alloc 𝓢 v .proj₁ ∣ˢ ≡ suc ∣ 𝓢 ∣ˢ
 alloc-length {v = v} 𝓢 = trans (length-++ (𝓢 .head) {[ v ]}) (trans (+-suc (∣ 𝓢 ∣ˢ) zero) (cong suc (+-identityʳ ∣ 𝓢 ∣ˢ)))
 -}
