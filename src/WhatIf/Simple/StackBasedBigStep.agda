@@ -1,4 +1,3 @@
-{-# OPTIONS --allow-unsolved-metas #-}
 module Simple.StackBasedBigStep where
 
 open import Data.Empty using (⊥; ⊥-elim)
@@ -103,15 +102,14 @@ data Expr : Set where
   app    : Expr → Expr → Expr
   seq    : Expr → Expr → Expr
   ref    : Qual → Expr → Expr
-  deref  : Qual → Expr → Expr
+  deref  : Expr → Expr
   setref : Expr → Expr → Expr
 
 data Val : Set
-data Local : Set where
-  ∅ : Local
-  ⟨_≔_,_⟩ : Ident → Val → Local → Local
-  ⟨_⇒_,_⟩ : Ident → Address → Local → Local
-Env = Local
+data Env : Set where
+  ∅ : Env
+  ⟨_≔_,_⟩ : Ident → Val → Env → Env
+  ⟨_⇒_,_⟩ : Ident → Address → Env → Env
 Heap = List Val
 
 record Stack : Set where
@@ -127,7 +125,7 @@ data Val where
 
   unit : Val
   cst  : ℕ → Val
-  clos : (q : Qual) → (𝓔 : Env) → (𝓢 : Stack)  → Var → Expr → Qual → Val
+  clos : (q : Qual) (𝓔 : Env) (𝓢 : Stack) (x : Var) (e : Expr) → Qual → Val
   ref  : (q : Qual) → (ℓ : ℕ) → Val
 
 data _∋_⇒_ : Env → Var → Address → Set where
@@ -136,28 +134,38 @@ data _∋_⇒_ : Env → Var → Address → Set where
   there : ∀ {𝓔}{x}{i}{s}{j} → 𝓔 ∋ x ⇒ i → ⟨ s ⇒ j , 𝓔 ⟩ ∋ x ⇒ i
   skip  : ∀ {𝓔}{x}{i}{s}{v} → 𝓔 ∋ x ⇒ i → ⟨ s ≔ v , 𝓔 ⟩ ∋ x ⇒ i
 
+val-stack : Val → Maybe Stack
+val-stack unit = nothing
+val-stack (cst x) = nothing
+val-stack (clos 𝟙 𝓔 𝓢 x e q₂) = nothing
+val-stack (clos 𝟚 𝓔 𝓢 x e q₂) = just 𝓢
+val-stack (ref q ℓ) = nothing
 
+clos-stack-env : Val → Maybe (Env × Stack)
+clos-stack-env unit = nothing
+clos-stack-env (cst x) = nothing
+clos-stack-env (clos q 𝓔 𝓢 x e x₁) = just (𝓔 , 𝓢)
+clos-stack-env (ref q ℓ) = nothing
 
 variable
   𝓔 𝓔′ : Env
   𝓗 𝓗′ 𝓗″ 𝓗‴ : Heap
   𝓢 𝓢′ 𝓢″ 𝓢‴ 𝓢⁗ 𝓢₁ 𝓢₂ 𝓢₃ 𝓢ᶜ : Stack
   𝓛 : List (List Val)
-  -- σ σ′ σ″ : StackMap
-  -- σ? : Maybe StackMap
-  -- 𝓢σ : Stack × StackMap
   s s′ : Ident
   v v′ v″ v₀ v₁ v₂ : Val
   vs vs′ : List Val
   x x′ : Var
   e e₁ e₂ e′ : Expr
-  Φ Φ′ Φ″ : Local
   n ℓ : ℕ
 
 -- push an argument on the stack
 
 push : Stack → Val → Stack
 push (mkS vars refs) v = mkS (vars ++ [ v ]) refs
+
+push-refs-≡ : push 𝓢 v .refs ≡ 𝓢 .refs
+push-refs-≡ = refl
 
 -- allocate a reference on the stack
 
@@ -168,10 +176,13 @@ salloc : Stack → Val → Stack × ℕ
 salloc (mkS vars₁ refs₁) v = (mkS vars₁ (refs₁ ++ [ v ])) , (length refs₁)
 
 
+𝓢∅ : Stack
+𝓢∅ = mkS [] []
+
 _≼ₛ_ : Stack → Stack → Set
 𝓢₁ ≼ₛ 𝓢₂ = (∃[ vs ] 𝓢₁ .vars ++ vs ≡ 𝓢₂ .vars) × length (𝓢₁ .refs) ≤ℕ length (𝓢₂ .refs)
 
-≼ₛ-bot : (𝓢 : Stack) → mkS [] [] ≼ₛ 𝓢
+≼ₛ-bot : (𝓢 : Stack) → 𝓢∅ ≼ₛ 𝓢
 ≼ₛ-bot 𝓢 = (𝓢 .vars , refl) , z≤n
 
 ≼ₛ-refl : 𝓢 ≼ₛ 𝓢
@@ -261,10 +272,25 @@ module _ (q : Qual) where
 
     qb-drop : ∀ {S≤x} → q-Bounded Γ Γ′ → (∀ {x′} {S′} → Γ′ ∋ x′ ⦂ S′ → x′ ≢ x)  → q-Bounded (Γ , x ⦂ S [ S≤x ]) (Γ′)
 
+
+  data q-Bounded-Env : Env → Env → Set where
+
+    qbe-∅ : q-Bounded-Env ∅ ∅
+
+    qbe-keep : q-Bounded-Env 𝓔 𝓔′ → q-Bounded-Env ⟨ s ≔ v , 𝓔 ⟩ ⟨ s ≔ v , 𝓔′ ⟩
+
+    qbe-drop : ∀ {a} → q-Bounded-Env 𝓔 𝓔′ → q-Bounded-Env ⟨ s ⇒ a , 𝓔 ⟩ (case q of λ { 𝟙 → 𝓔′ ; 𝟚 → ⟨ s ⇒ a , 𝓔′ ⟩ })
+
+
 is-bounded : q-Bounded q Γ Γ′ → q-Bound q Γ′
 is-bounded qb-∅ = qb-∅
 is-bounded (qb-keep x qbdd) = qb-add x (is-bounded qbdd)
 is-bounded (qb-drop qbdd _) = is-bounded qbdd
+
+𝟚-bounded-env : q-Bounded-Env 𝟚 𝓔 𝓔′ → 𝓔 ≡ 𝓔′
+𝟚-bounded-env qbe-∅ = refl
+𝟚-bounded-env (qbe-keep qbe) = trans ((cong₂ ⟨_≔_, _ ⟩) refl refl) ((cong ⟨ _ ≔ _ ,_⟩) (𝟚-bounded-env qbe))
+𝟚-bounded-env (qbe-drop qbe) = trans ((cong₂ ⟨_⇒_, _ ⟩) refl refl) ((cong ⟨ _ ⇒ _ ,_⟩) (𝟚-bounded-env qbe))
 
 
 𝟙-bound⇒∀𝟚∉ : q-Bound 𝟙 Γ → (∀ s S → ¬ (Γ ∋ X s 𝟚 ⦂ S))
@@ -388,47 +414,13 @@ data _⊢_⦂_ : Context → Expr → QType → Set where
 
   TDeref : {wf : q-of S ≤ q}
     → Γ ⊢ e ⦂ (Ref S wf ^ q)
-    → Γ ⊢ deref q e ⦂ S
+    → Γ ⊢ deref e ⦂ S
 
   TSetref : {wf : q-of S ≤ q}
     → Γ ⊢ e₁ ⦂ (Ref S wf ^ q)
     → Γ ⊢ e₂ ⦂ S
-    → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ 𝟚)
+    → Γ ⊢ setref e₁ e₂ ⦂ (Unit ^ 𝟙)
 
--- typing is closed under context subtyping
-
--- q-Bounded-<<⦂ : Γ′ <<⦂ Γ → q-Bounded q Γ Γ″ → ∃[ Γ‴ ] Γ‴ <<⦂ Γ″ × q-Bounded q Γ′ Γ‴
--- q-Bounded-<<⦂ ∅ qb-∅ = ∅ , ∅ , qb-∅
--- q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-keep qS≤ qbdd)
---   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
--- ... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out = (Γ‴ , _ ⦂ _ [ _ ]) , (Γ‴<<⦂Γ″ ,⦂ S′<⦂S) , qb-keep (≤-trans (q-of-mono S′<⦂S) qS≤) qbdd-out
--- q-Bounded-<<⦂ (Γ′<<⦂Γ ,⦂ S′<⦂S) (qb-drop qbdd f)
---   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
--- ... | Γ‴ , Γ‴<<⦂Γ″ , qbdd-out =  Γ‴ , Γ‴<<⦂Γ″ , qb-drop qbdd-out {!!}
-
--- context-sub-variable : Γ ∋ x ⦂ S → Γ′ <<⦂ Γ → ∃[ S′ ] S′ <⦂ S × Γ′ ∋ x ⦂ S′
--- context-sub-variable here (_ ,⦂ S′<⦂S) = _ , S′<⦂S , here
--- context-sub-variable (there x∈ x≢) (Γ′<<⦂Γ ,⦂ _)
---   with context-sub-variable x∈ Γ′<<⦂Γ
--- ... | S′ , S′<⦂S , x∈′ = S′ , S′<⦂S , there x∈′ x≢
-
--- context-subtyping : Γ ⊢ e ⦂ S → Γ′ <<⦂ Γ → Γ′ ⊢ e ⦂ S
--- context-subtyping TUnit Γ′<<⦂Γ = TUnit
--- context-subtyping (TVar x∈) Γ′<<⦂Γ
---   with context-sub-variable x∈ Γ′<<⦂Γ
--- ... | S′ , S′<⦂S , x∈′ = TSub (TVar x∈′) S′<⦂S
--- context-subtyping {Γ = Γ}{Γ′ = Γ′} (TAbs {S≤x = S≤x} ⊢e qbdd eq) Γ′<<⦂Γ
---   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
--- ... | _ , Γ‴<<⦂Γ′ , qbdd-out
---   = TAbs {S≤x = S≤x} (context-subtyping ⊢e (Γ‴<<⦂Γ′ ,⦂ <⦂-refl)) qbdd-out eq
--- context-subtyping (TApp ⊢e ⊢e₁) Γ′<<⦂Γ = TApp (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
--- context-subtyping (TSub ⊢e x) Γ′<<⦂Γ = TSub (context-subtyping ⊢e Γ′<<⦂Γ) x
--- context-subtyping (TSeq x ⊢e ⊢e₁ x₁) Γ′<<⦂Γ = TSeq x (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ) x₁
--- context-subtyping (TRef ⊢e qbdd) Γ′<<⦂Γ
---   with q-Bounded-<<⦂ Γ′<<⦂Γ qbdd
--- ... | _ , Γ‴<<⦂Γ′ , qbdd-out = TRef (context-subtyping ⊢e Γ‴<<⦂Γ′) qbdd-out 
--- context-subtyping (TDeref ⊢e) Γ′<<⦂Γ = TDeref (context-subtyping ⊢e Γ′<<⦂Γ)
--- context-subtyping (TSetref ⊢e ⊢e₁) Γ′<<⦂Γ = TSetref (context-subtyping ⊢e Γ′<<⦂Γ) (context-subtyping ⊢e₁ Γ′<<⦂Γ)
 
 
 -- heap & stack typing
@@ -532,6 +524,7 @@ gen-access-unique : GenAccess 𝓔 x va → GenAccess 𝓔 x va′ → va ≡ va
 gen-access-unique (on-heap x) (on-heap x₁) = cong inj₁ (access-unique x x₁)
 gen-access-unique (on-stack x) (on-stack x₁) = cong inj₂ (stack-access-unique x x₁)
 
+
 -- heap and stack types
 
 Typeof : Qual → Set
@@ -626,37 +619,35 @@ _≼ₕₛ_ : HSType → HSType → Set
 ---- value typing & environment agreement
 
 
-bound-stack : Qual → Stack → Stack
-bound-stack 𝟙 𝓢 = mkS [] []
-bound-stack 𝟚 𝓢 = 𝓢
+new-frame? : Qual → Stack → Stack
+new-frame? 𝟙 𝓢 = 𝓢∅
+new-frame? 𝟚 𝓢 = 𝓢
 
-data ⟨_⟩⊢[_⦂_] (Σₕₛ : HSType) : Val → QType → Set
+data ⟨_,_⟩⊢[_⦂_] (Σₕ : HType) (Σₛ : SType) : Val → QType → Set
 
-record ⟨_,_⟩⊨_/_ (Σₕₛ : HSType) (Γ : Context) (𝓔 : Env) (𝓢 : Stack) : Set where
+record ⟨_,_,_⟩⊨_/_ (Σₕ : HType) (Σₛ : SType) (Γ : Context) (𝓔 : Env) (𝓢 : Stack) : Set where
   inductive
   constructor mk-⊨
   field
-    ⊨-heap  : ∀ {s}{T} → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → ∃[ v ] Access 𝓔 (X s 𝟙) v × ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
-    ⊨-stack : ∀ {s}{S} → Γ ∋ X s 𝟚 ⦂ S → ∃[ a ] StackAccess 𝓔 (X s 𝟚) a × ∃[ v ] just v ≡ (𝓢 ↓ᵥ a) × ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
-open ⟨_,_⟩⊨_/_ public
+    ⊨-heap  : ∀ {s}{T} → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → ∃[ v ] Access 𝓔 (X s 𝟙) v × ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+    ⊨-stack : ∀ {s}{S} → Γ ∋ X s 𝟚 ⦂ S → ∃[ a ] StackAccess 𝓔 (X s 𝟚) a × ∃[ v ] just v ≡ (𝓢 ↓ᵥ a) × ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]
+open ⟨_,_,_⟩⊨_/_ public
 
 -- value typing
 
--- resolve : Qual → StackMap → Maybe StackMap
--- resolve 𝟙 σ = nothing
--- resolve 𝟚 σ = just σ
+choose : (q : Qual) → HType → SType → List (Typeof q)
+choose 𝟙 Σₕ Σₛ = Σₕ
+choose 𝟚 Σₕ Σₛ = Σₛ
 
-data ⟨_⟩⊢[_⦂_] Σₕₛ where {- cf. p 15:11 of WhatIf -}
+data ⟨_,_⟩⊢[_⦂_] Σₕ Σₛ where {- cf. p 15:11 of WhatIf -}
 
-  TVUnit : ⟨ Σₕₛ ⟩⊢[ unit ⦂ (Unit ^ q) ]
+  TVUnit : ⟨ Σₕ , Σₛ ⟩⊢[ unit ⦂ (Unit ^ q) ]
 
-  TVCst : ⟨ Σₕₛ ⟩⊢[ cst n ⦂ (Base ^ q) ]
+  TVCst : ⟨ Σₕ , Σₛ ⟩⊢[ cst n ⦂ (Base ^ q) ]
 
   TVClos : ∀ {S₁≤x}
-    → (∀⊨𝓔 : ∀ 𝓢′ → (𝓢≼ : 𝓢 ≼ₛ 𝓢′) → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢′)
-    -- → (⊨𝓔 : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢′)
-    -- → (𝓢≼ : 𝓢 ≼ₛ 𝓢′)
-    → (𝓢≡ : 𝓢 ≡ bound-stack q 𝓢)
+    → (∀⊨𝓔 : ∀ 𝓢′ → (𝓢≼ : 𝓢 ≼ₛ 𝓢′) → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢′)
+    → (𝓢≡ : 𝓢 ≡ new-frame? q 𝓢)
     → (qbd : q-Bound q Γ)
     → (⊢e : (Γ , x ⦂ S₁ [ S₁≤x ]) ⊢ e ⦂ S₂)
     → let q₂ = q-of S₂ in
@@ -664,13 +655,14 @@ data ⟨_⟩⊢[_⦂_] Σₕₛ where {- cf. p 15:11 of WhatIf -}
       (wf₁ : q₁ ≤ q)
       (wf₂ : q₂ ≤ q)
     → (<⦂S : (Fun S₁ S₂ wf₁ wf₂ ^ q) <⦂ S)
-    → ⟨ Σₕₛ ⟩⊢[ clos q 𝓔 𝓢 x e q₂′ ⦂ S ]
+    → ⟨ Σₕ , Σₛ ⟩⊢[ clos q 𝓔 𝓢 x e q₂ ⦂ S ]
 
   TVRef : ∀ {T : Typeof q}
-    → (ℓ< : ℓ < length (Σₕₛ q))
-    → (lkup≡ : lookup (Σₕₛ q) (fromℕ< ℓ<) ≡ T)
+    → let Σᵣ = choose q Σₕ Σₛ in
+      (ℓ< : ℓ < length Σᵣ)
+    → (lkup≡ : lookup Σᵣ (fromℕ< ℓ<) ≡ T)
     → (<⦂S : (Ref (q ^^ T) q-^^-≤ ^ q) <⦂ S)
-    → ⟨ Σₕₛ ⟩⊢[ ref q ℓ ⦂ S ]
+    → ⟨ Σₕ , Σₛ ⟩⊢[ ref q ℓ ⦂ S ]
 
 
 rename-bounded′ : q-Bounded q Γ Γ′ → Γ′ ∋ x ⦂ S → Γ ∋ x ⦂ S
@@ -678,7 +670,7 @@ rename-bounded′ (qb-keep x qbdd) (here) = here
 rename-bounded′ (qb-keep x qbdd) (there x∈ x≢) = there (rename-bounded′ qbdd x∈) x≢
 rename-bounded′ (qb-drop qbdd f) x∈ = there (rename-bounded′ qbdd x∈) (f x∈)
 
-restrict′ : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢 → q-Bounded q Γ Γ′ → ⟨ Σₕₛ , Γ′ ⟩⊨ 𝓔 / bound-stack q 𝓢
+restrict′ : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → q-Bounded q Γ Γ′ → ⟨ Σₕ , Σₛ , Γ′ ⟩⊨ 𝓔 / new-frame? q 𝓢
 restrict′ {q = 𝟚} ⊨𝓔 qbdd =
   mk-⊨ (λ x∈ → ⊨-heap ⊨𝓔 (rename-bounded′ qbdd x∈))
        (λ x∈ → ⊨-stack ⊨𝓔 (rename-bounded′ qbdd x∈))
@@ -687,42 +679,65 @@ restrict′ {q = 𝟙} ⊨𝓔 qbdd =
        (λ{ x∈ → ⊥-elim (𝟙-bound⇒∀𝟚∉ (is-bounded qbdd) _ _ x∈)})
 
 
+𝟙-value : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ] → S <⦂ mkQ 𝟙 T → q-val v ≡ 𝟙
+𝟙-value TVUnit S<⦂ = refl
+𝟙-value TVCst S<⦂ = refl
+𝟙-value (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ (SQual ≤-refl x₁)) (SQual ≤-refl x) = refl
+𝟙-value (TVRef ℓ< lkup≡ (SQual ≤-refl x₁)) (SQual ≤-refl x) = refl
+
+𝟙-value-no-stack : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ] → q-of S ≡ 𝟙 → ⟨ Σₕ , [] ⟩⊢[ v ⦂ S ]
+𝟙-env-no-stack : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → q-Bound 𝟙 Γ →  ⟨ Σₕ , [] , Γ ⟩⊨ 𝓔 / 𝓢
+
+𝟙-value-no-stack TVUnit qs≡𝟙 = TVUnit
+𝟙-value-no-stack TVCst qs≡𝟙 = TVCst
+𝟙-value-no-stack (TVClos {q = 𝟙} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual ≤-refl x)) refl = TVClos (λ 𝓢′ 𝓢≼ → 𝟙-env-no-stack (∀⊨𝓔 𝓢′ 𝓢≼) qbd) refl qbd ⊢e wf₁ wf₂ (SQual ≤-refl x)
+𝟙-value-no-stack (TVRef {𝟙} ℓ< lkup≡ <⦂S) refl = TVRef ℓ< lkup≡ <⦂S
+𝟙-value-no-stack (TVRef {𝟚} ℓ< lkup≡ (SQual () x)) refl
+
+𝟙-env-no-stack ⊨𝓔 qbd = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , 𝟙-value-no-stack ⊢v refl)
+                             λ x∈ → contradiction x∈ (𝟙-bound⇒∀𝟚∉ qbd _ _)
+
 -- heap typing
 
 ⊨-adjust-≼ₛ : 𝓢 ≼ₛ 𝓢′
-  → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢
-  → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢′
+  → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢
+  → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢′
 
 ⊨-adjust-≼ₛ {𝓢 = 𝓢}{𝓢′ = 𝓢′} 𝓢≼ₛ𝓢′ ⊨𝓔 =
   mk-⊨ (λ x∈ → ⊨-heap ⊨𝓔 x∈)
        (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , sa , v , (↓ᵥ-mono {𝓢 = 𝓢}{𝓢′ = 𝓢′} 𝓢≼ₛ𝓢′ eq) , ⊢v)
 
--- allocate one heap allocated argument and create a new stack frame
+-- a heap value can be typed with any stack type
 
-⊢ᵥ-adjust : ∀ {Σₛ}
-  → (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ])
-  → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ]
+⊢ᵥ-adjust-𝟙 : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ] →  ⟨ Σₕ , Σₛ′ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+⊨-adjust-𝟙 : q-Bound 𝟙 Γ → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢′ → ⟨ Σₕ , Σₛ′ , Γ ⟩⊨ 𝓔 / 𝓢′
 
-⊨-adjust :  ∀ {Σₛ}
-  → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢
-  → (∀ s S → ¬ (Γ ∋ X s 𝟚 ⦂ S))
-  → ⟨ adjust-stack Σₕₛ Σₛ , Γ ⟩⊨ 𝓔 / mkS [] []
+⊢ᵥ-adjust-𝟙 TVUnit = TVUnit
+⊢ᵥ-adjust-𝟙 TVCst = TVCst
+⊢ᵥ-adjust-𝟙 (TVClos {q = 𝟙} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → ⊨-adjust-𝟙 qbd (∀⊨𝓔 𝓢′ 𝓢≼)) 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
+⊢ᵥ-adjust-𝟙 (TVClos {q = 𝟚} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ (SQual () x))
+⊢ᵥ-adjust-𝟙 (TVRef {𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢ᵥ-adjust-𝟙 (TVRef {𝟚} ℓ< lkup≡ (SQual () x))
 
--- stack adjustment does not happen for a stack-allocated closure
--- in this case, the caller's stack is carried over to the callee
+⊨-adjust-𝟙 qbd ⊨𝓔 = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , ⊢ᵥ-adjust-𝟙 ⊢v)
+                         (λ {s} {S} x∈ → contradiction x∈ (𝟙-bound⇒∀𝟚∉ qbd s S))
 
-⊢ᵥ-adjust TVUnit = TVUnit
-⊢ᵥ-adjust TVCst = TVCst
--- ⊢ᵥ-adjust (TVClos {𝓢 = 𝓢}{q = 𝟙} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (⊨-adjust ⊨𝓔 (𝟙-bound⇒∀𝟚∉ qbd)) (≼ₛ-refl {𝓢}) refl qbd ⊢e wf₁ wf₂ <⦂S
-⊢ᵥ-adjust (TVClos {𝓢 = 𝓢}{q = 𝟙} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → {!⊨-adjust   !}) refl qbd ⊢e wf₁ wf₂ <⦂S
--- ⊢ᵥ-adjust (TVClos {q = 𝟚} ⊨𝓔 ≼𝓢 𝓢≡ qbd ⊢e wf₁ wf₂ (SQual () x))
-⊢ᵥ-adjust (TVClos {q = 𝟚} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ (SQual () x))
-⊢ᵥ-adjust (TVRef {q = 𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
-⊢ᵥ-adjust (TVRef {q = 𝟚} ℓ< lkup≡ (SQual () x))
 
-⊨-adjust ⊨𝓔 ∀𝟚∉ =
-  mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , (⊢ᵥ-adjust ⊢v))
-       (λ x∈ → ⊥-elim (∀𝟚∉ _ _ x∈))
+-- extension for value types and agreement
+
+⊨-extend : Σₕ ≼ Σₕ′ → Σₛ ≼ Σₛ′ → 𝓢 ≼ₛ 𝓢′ → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → ⟨ Σₕ′ , Σₛ′ , Γ ⟩⊨ 𝓔 / 𝓢′
+⊢ᵥ-extend : Σₕ ≼ Σₕ′ → Σₛ ≼ Σₛ′ → 𝓢 ≼ₛ 𝓢′ → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ] → ⟨ Σₕ′ , Σₛ′ ⟩⊢[ v ⦂ S ]
+
+⊨-extend {𝓢 = 𝓢}{𝓢′ = 𝓢′} ≼Σₕ ≼Σₛ ≼𝓢 ⊨𝓔 = mk-⊨ (λ x → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x in v , acc , ⊢ᵥ-extend {𝓢 = 𝓢}{𝓢′ = 𝓢′} ≼Σₕ ≼Σₛ ≼𝓢 ⊢v)
+                         (λ x → let a , sacc , v , jv≡ , ⊢v = ⊨-stack ⊨𝓔 x in a , sacc , v , ↓ᵥ-mono{𝓢 = 𝓢}{𝓢′ = 𝓢′} ≼𝓢 jv≡ , ⊢ᵥ-extend {𝓢 = 𝓢}{𝓢′ = 𝓢′} ≼Σₕ ≼Σₛ ≼𝓢 ⊢v)
+⊢ᵥ-extend ≼Σₕ ≼Σₛ ≼𝓢 TVUnit = TVUnit
+⊢ᵥ-extend ≼Σₕ ≼Σₛ ≼𝓢 TVCst = TVCst
+⊢ᵥ-extend ≼Σₕ ≼Σₛ ≼𝓢 (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S)
+  = TVClos (λ 𝓢′₁ 𝓢≼ → ⊨-extend {𝓢 = 𝓢′₁} ≼Σₕ ≼Σₛ (≼ₛ-refl {𝓢′₁}) (∀⊨𝓔 _ 𝓢≼)) 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
+⊢ᵥ-extend {Σₕ = Σₕ} {Σₛ = Σₛ} ≼Σₕ@(qts , eq) ≼Σₛ ≼𝓢 (TVRef {q = 𝟙} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (≼⇒length ≼Σₕ)) (trans (lookup-from-i′ Σₕ ℓ< eq) lkup≡) <⦂S
+⊢ᵥ-extend {Σₕ = Σₕ} {Σₛ = Σₛ} ≼Σₕ ≼Σₛ@(qts , eq) ≼𝓢 (TVRef {q = 𝟚} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (≼⇒length ≼Σₛ)) (trans (lookup-from-i′ Σₛ ℓ< eq) lkup≡) <⦂S
+
+
 
 {-
 
@@ -738,17 +753,18 @@ restrict′ {q = 𝟙} ⊨𝓔 qbdd =
 ⊢ᵥ-adjust-𝟚 ⊢ₛvs (TVRef {q = 𝟚} ℓ< lkup≡ <⦂S) = TVRef {!!} {!!} <⦂S
 -}
 
-_⊢ₕ_ : HSType → Heap → Set
-Σₕₛ ⊢ₕ 𝓗 = Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙)]) 𝓗 (Σₕₛ 𝟙)
+_⊢ₕ_ : HType → Heap → Set
+Σₕ ⊢ₕ 𝓗 = Pointwise (λ v T → ⟨ Σₕ , [] ⟩⊢[ v ⦂ (T ^ 𝟙)]) 𝓗 Σₕ
 
-⊢ₕₛ-length-aux : ∀ {q}{Σₕ} {vs : List Val} → Pointwise (λ x y → ⟨ Σₕₛ ⟩⊢[ x ⦂ (q ^^ y) ]) vs Σₕ → length Σₕ ≡ length vs
-⊢ₕₛ-length-aux [] = refl
-⊢ₕₛ-length-aux (x∼y ∷ pws) = cong suc (⊢ₕₛ-length-aux pws)
+⊢ₕ-length-aux : ∀ {q} {Σᵣ} {vs : List Val} → Pointwise (λ x y → ⟨ Σₕ , Σₛ ⟩⊢[ x ⦂ (q ^^ y) ]) vs Σᵣ → length Σᵣ ≡ length vs
+⊢ₕ-length-aux [] = refl
+⊢ₕ-length-aux (x∼y ∷ pws) = cong suc (⊢ₕ-length-aux pws)
 
-⊢ₕ-length : Σₕₛ ⊢ₕ 𝓗 → length (Σₕₛ 𝟙) ≡ length 𝓗
-⊢ₕ-length ⊢𝓗 = ⊢ₕₛ-length-aux ⊢𝓗
+⊢ₕ-length : Σₕ ⊢ₕ 𝓗 → length Σₕ ≡ length 𝓗
+⊢ₕ-length ⊢𝓗 = ⊢ₕ-length-aux ⊢𝓗
 
 
+{-   this lemma becomes trivial
 ⊢ₕ-adjust-aux : ∀ {Σₕ}{vs vs′ : List Val}
   → ∀ Σₛ
   → Pointwise (λ v S → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ S ]) vs′ Σₛ
@@ -760,18 +776,19 @@ _⊢ₕ_ : HSType → Heap → Set
 
 ⊢ₕ-adjust : ∀ {vs : List Val}
   → ∀ Σₛ
-  → Pointwise (λ v S → ⟨ adjust-stack Σₕₛ Σₛ ⟩⊢[ v ⦂ S ]) vs Σₛ
-  → Σₕₛ ⊢ₕ 𝓗
+  → Pointwise (λ v S → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]) vs Σₛ
+  → Σₕ ⊢ₕ 𝓗
   → adjust-stack Σₕₛ Σₛ ⊢ₕ 𝓗
 ⊢ₕ-adjust Σₛ ⊢ₛvs ⊢𝓗 = ⊢ₕ-adjust-aux Σₛ ⊢ₛvs ⊢𝓗
+-}
 
 -- stack typing
 
-_⊢ₛ_ : HSType → Stack → Set
-Σₕₛ ⊢ₛ 𝓢 = Pointwise ⟨ Σₕₛ ⟩⊢[_⦂_] (𝓢 .refs) (Σₕₛ 𝟚)
+_,_⊢ₛ_ : HType → SType → Stack → Set
+Σₕ , Σₛ ⊢ₛ 𝓢 = Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] (𝓢 .refs) Σₛ
 
-⊢ₛ-length : Σₕₛ ⊢ₛ 𝓢 → length (Σₕₛ 𝟚) ≡ length (𝓢 .refs)
-⊢ₛ-length ⊢𝓢 = ⊢ₕₛ-length-aux ⊢𝓢
+⊢ₛ-length : Σₕ , Σₛ ⊢ₛ 𝓢 → length Σₛ ≡ length (𝓢 .refs)
+⊢ₛ-length ⊢𝓢 = ⊢ₕ-length-aux ⊢𝓢
 
 {-
 ⊢ₛ-adjust-aux : ∀ {vs : List Val} {Σₛ : List QType}
@@ -788,140 +805,162 @@ _⊢ₛ_ : HSType → Stack → Set
 ⊢ₛ-adjust ≼Σ ⊢𝓢 = ⊢ₛ-adjust-aux ≼Σ ⊢𝓢
 -}
 
-⊨-adjust-[] :
-  adjust-stack Σₕₛ [] ≼ₕₛ Σₕₛ′
-  → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢
-  → ⟨ adjust-stack Σₕₛ′ (Σₕₛ 𝟚) , Γ ⟩⊨ 𝓔 / 𝓢
+⊨-adjust-≼ₕ :
+  Σₕ ≼ Σₕ′
+  → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢
+  → ⟨ Σₕ′ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢
 
-⊢ᵥ-adjust-[] :
-  adjust-stack Σₕₛ [] ≼ₕₛ Σₕₛ′
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
-  → ⟨ adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⟩⊢[ v ⦂ S ]
-⊢ᵥ-adjust-[] ≼Σ TVUnit = TVUnit
-⊢ᵥ-adjust-[] ≼Σ TVCst = TVCst
--- ⊢ᵥ-adjust-[] ≼Σ (TVClos ⊨𝓔 ≼𝓢 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (⊨-adjust-[] ≼Σ ⊨𝓔) ≼𝓢 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
-⊢ᵥ-adjust-[] ≼Σ (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos {!!} 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
-⊢ᵥ-adjust-[] {Σₕₛ} ≼Σ (TVRef {𝟙} ℓ< lkup≡ <⦂S)
-  with ≼Σ 𝟙 in eq
+⊢ᵥ-adjust-≼ₕ :
+  Σₕ ≼ Σₕ′
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]
+  → ⟨ Σₕ′ , Σₛ ⟩⊢[ v ⦂ S ]
+⊢ᵥ-adjust-≼ₕ ≼Σ TVUnit = TVUnit
+⊢ᵥ-adjust-≼ₕ ≼Σ TVCst = TVCst
+⊢ᵥ-adjust-≼ₕ ≼Σ (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → ⊨-adjust-≼ₕ ≼Σ (∀⊨𝓔 𝓢′ 𝓢≼)) 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
+⊢ᵥ-adjust-≼ₕ {Σₕ = Σₕ} ≼Σ (TVRef {𝟙} ℓ< lkup≡ <⦂S)
+  with ≼Σ in eq
 ... | qts , eq1  
-  = TVRef (≤ℕ-trans ℓ< (≼ₕₛ⇒length ≼Σ 𝟙)) (trans (lookup-from-i′ (Σₕₛ 𝟙) ℓ< eq1) lkup≡) <⦂S
-⊢ᵥ-adjust-[] ≼Σ (TVRef {𝟚} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+  = TVRef (≤ℕ-trans ℓ< (≼⇒length ≼Σ)) (trans (lookup-from-i′ Σₕ ℓ< eq1) lkup≡) <⦂S
+⊢ᵥ-adjust-≼ₕ ≼Σ (TVRef {𝟚} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
 
-⊨-adjust-[] ≼Σ ⊨𝓔
-  = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , ⊢ᵥ-adjust-[] ≼Σ ⊢v)
-         (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , sa , v , eq , ⊢ᵥ-adjust-[] ≼Σ ⊢v)
-
-⊢ₛ-adjust-aux-[] : ∀ {vs : List Val} {Σₛ : List QType}
-  → adjust-stack Σₕₛ [] ≼ₕₛ Σₕₛ′
-  → Pointwise ⟨ Σₕₛ ⟩⊢[_⦂_] vs Σₛ
-  → Pointwise ⟨ adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⟩⊢[_⦂_] vs Σₛ
-⊢ₛ-adjust-aux-[] ≼Σ [] = []
-⊢ₛ-adjust-aux-[] ≼Σ (x∼y ∷ pws) = ⊢ᵥ-adjust-[] ≼Σ x∼y ∷ (⊢ₛ-adjust-aux-[] ≼Σ pws)
+⊨-adjust-≼ₕ ≼Σ ⊨𝓔
+  = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , ⊢ᵥ-adjust-≼ₕ ≼Σ ⊢v)
+         (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , sa , v , eq , ⊢ᵥ-adjust-≼ₕ ≼Σ ⊢v)
 
 
-⊢ₛ-adjust-[] :
-  adjust-stack Σₕₛ [] ≼ₕₛ Σₕₛ′
-  → Σₕₛ ⊢ₛ 𝓢
-  → adjust-stack Σₕₛ′ (Σₕₛ 𝟚) ⊢ₛ 𝓢
-⊢ₛ-adjust-[] ≼Σ ⊢𝓢 = ⊢ₛ-adjust-aux-[] ≼Σ ⊢𝓢
 
-⊢ᵥ-adjust-push : ∀ {Σₛ}
+⊢ₛ-adjust-aux-≼ₕ : ∀ {vs : List Val} {Σᵣ : List QType}
+  → Σₕ ≼ Σₕ′
+  → Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+  → Pointwise ⟨ Σₕ′ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+⊢ₛ-adjust-aux-≼ₕ ≼Σ [] = []
+⊢ₛ-adjust-aux-≼ₕ ≼Σ (x∼y ∷ pws) = ⊢ᵥ-adjust-≼ₕ ≼Σ x∼y ∷ ⊢ₛ-adjust-aux-≼ₕ ≼Σ pws
+
+
+⊢ₛ-adjust-≼ₕ :
+  Σₕ ≼ Σₕ′
+  → Σₕ , Σₛ ⊢ₛ 𝓢
+  → Σₕ′ , Σₛ ⊢ₛ 𝓢
+⊢ₛ-adjust-≼ₕ ≼Σ ⊢𝓢 = ⊢ₛ-adjust-aux-≼ₕ ≼Σ ⊢𝓢
+
+{- needed?
+⊢ᵥ-adjust-push : ∀ {Σᵣ}
   → (vs : List Val)
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₀ ]
-  → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ Σₛ)  ⟩⊢[ v ⦂ S₀ ]
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S₀ ]
+  → ⟨ Σₕ , (Σₛ ++ Σᵣ)  ⟩⊢[ v ⦂ S₀ ]
 
-⊨-adjust-push : ∀ {vs}{Σₛ}
-  → (⊨𝓔   : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢)
-  → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ Σₛ) , Γ ⟩⊨ 𝓔 / mkS (𝓢 .vars) (𝓢 .refs ++ vs)
+⊨-adjust-push : ∀ {vs}{Σᵣ}
+  → (⊨𝓔 : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢)
+  → ⟨ Σₕ , (Σₛ ++ Σᵣ) , Γ ⟩⊨ 𝓔 / mkS (𝓢 .vars ++ vs) (𝓢 .refs)
 
 ⊢ᵥ-adjust-push vs TVUnit = TVUnit
 ⊢ᵥ-adjust-push vs TVCst = TVCst
--- ⊢ᵥ-adjust-push vs (TVClos {𝓢′ = 𝓢′}{q = 𝟙} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
---   = TVClos (⊨-adjust-push {vs = vs} ⊨𝓔) (≼ₛ-trans{mkS [] []}{𝓢′}{push-refs 𝓢′ vs} (≼ₛ-bot 𝓢′) (≼ₛ-extend{𝓢′} vs)) refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
-⊢ᵥ-adjust-push vs (TVClos{q = 𝟙} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
-  = TVClos {!!} refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
--- ⊢ᵥ-adjust-push vs (TVClos {𝓢′ = 𝓢′} {𝓢 = 𝓢}{q = 𝟚} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
---   = TVClos (⊨-adjust-push {vs = vs} ⊨𝓔) (≼ₛ-trans {𝓢} {𝓢′} {push-refs 𝓢′ vs} ≼𝓢 (≼ₛ-extend{𝓢′} vs)) refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
-⊢ᵥ-adjust-push vs (TVClos{q = 𝟚} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
-  = TVClos {!!} refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
-⊢ᵥ-adjust-push vs (TVRef {𝟙} ℓ< x <⦂S) = TVRef ℓ< x <⦂S
-⊢ᵥ-adjust-push {Σₕₛ = Σₕₛ} {Σₛ = Σₛ} vs (TVRef {𝟚} ℓ< lkup≡ <⦂S)
-  = TVRef (≤ℕ-trans ℓ< (length-≤ (Σₕₛ 𝟚) Σₛ)) (trans (lookup-from-i (Σₕₛ 𝟚) ℓ<) lkup≡) <⦂S
+⊢ᵥ-adjust-push vs (TVClos {q = 𝟙} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → {!(∀⊨𝓔 𝓢′ 𝓢≼)!}) {!!} {!!} {!!} {!!} {!!} {!!}
+⊢ᵥ-adjust-push vs (TVClos {q = 𝟚} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = {!!}
+⊢ᵥ-adjust-push vs (TVRef {𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢ᵥ-adjust-push {Σₛ = Σₛ}{Σᵣ = Σᵣ} vs (TVRef {𝟚} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (length-≤ Σₛ Σᵣ)) (trans (lookup-from-i Σₛ ℓ<) lkup≡) <⦂S
 
-⊨-adjust-push {𝓢 = 𝓢}{vs = vs} ⊨𝓔
-  = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈
-                 in  v , acc , ⊢ᵥ-adjust ⊢v)
-         (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈
-                 in  a , sa , v , trans (↓′-mono {𝓢 .vars} {[]} a eq) (cong (_↓′ a) (++-identityʳ (𝓢 .vars))) , ⊢ᵥ-adjust-push vs ⊢v)
+-- -- ⊢ᵥ-adjust-push vs (TVClos {𝓢′ = 𝓢′}{q = 𝟙} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
+-- --   = TVClos (⊨-adjust-push {vs = vs} ⊨𝓔) (≼ₛ-trans{mkS [] []}{𝓢′}{push-refs 𝓢′ vs} (≼ₛ-bot 𝓢′) (≼ₛ-extend{𝓢′} vs)) refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
+-- ⊢ᵥ-adjust-push vs (TVClos{q = 𝟙} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
+--   = TVClos {!!} refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
+-- -- ⊢ᵥ-adjust-push vs (TVClos {𝓢′ = 𝓢′} {𝓢 = 𝓢}{q = 𝟚} ⊨𝓔 ≼𝓢 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
+-- --   = TVClos (⊨-adjust-push {vs = vs} ⊨𝓔) (≼ₛ-trans {𝓢} {𝓢′} {push-refs 𝓢′ vs} ≼𝓢 (≼ₛ-extend{𝓢′} vs)) refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
+-- ⊢ᵥ-adjust-push vs (TVClos{q = 𝟚} ∀⊨𝓔 refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄)))
+--   = TVClos {!!} refl qbd ⊢e wf₁ wf₂ (SQual qsub (SFun x₃ x₄))
+-- ⊢ᵥ-adjust-push vs (TVRef {𝟙} ℓ< x <⦂S) = TVRef ℓ< x <⦂S
+-- ⊢ᵥ-adjust-push {Σₕₛ = Σₕₛ} {Σₛ = Σₛ} vs (TVRef {𝟚} ℓ< lkup≡ <⦂S)
+--   = TVRef (≤ℕ-trans ℓ< (length-≤ (Σₕₛ 𝟚) Σₛ)) (trans (lookup-from-i (Σₕₛ 𝟚) ℓ<) lkup≡) <⦂S
 
-⊢ₛ-adjust-aux-push : ∀ {Σₛ}
+-- ⊨-adjust-push {𝓢 = 𝓢}{vs = vs} ⊨𝓔
+--   = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈
+--                  in  v , acc , ⊢ᵥ-adjust ⊢v)
+--          (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈
+--                  in  a , sa , v , trans (↓′-mono {𝓢 .vars} {[]} a eq) (cong (_↓′ a) (++-identityʳ (𝓢 .vars))) , ⊢ᵥ-adjust-push vs ⊢v)
+-}
+
+{-
+⊢ₛ-adjust-aux-push : ∀ {Σᵣ}
   (xs : List Val)
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₀ ]
-  → Pointwise ⟨ Σₕₛ ⟩⊢[_⦂_] vs Σₛ
-  → Pointwise ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ S₀ ]) ⟩⊢[_⦂_] (vs ++ [ v ]) (Σₛ ++ [ S₀ ])
-⊢ₛ-adjust-aux-push xs ⊢v [] = (⊢ᵥ-adjust-push xs ⊢v) ∷ []
-⊢ₛ-adjust-aux-push xs ⊢v (x∼y ∷ pws) = ⊢ᵥ-adjust-push xs x∼y ∷ ⊢ₛ-adjust-aux-push xs ⊢v pws
+  → Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+  → Pointwise ⟨ Σₕ , Σₛ ⟩⊢[_⦂_] vs Σᵣ
+⊢ₛ-adjust-aux-push xs [] = {!!}
+⊢ₛ-adjust-aux-push xs (x∼y ∷ pws) = {!!} ∷ ⊢ₛ-adjust-aux-push xs pws
+-}
 
-⊢ₛ-adjust-push :
-  ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
-  → Σₕₛ ⊢ₛ 𝓢
-  → adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ S ]) ⊢ₛ (mkS (𝓢 .vars) (𝓢 .refs ++ [ v ]))
-⊢ₛ-adjust-push {𝓢 = 𝓢} ⊢v ⊢𝓢 = ⊢ₛ-adjust-aux-push (𝓢 .refs) ⊢v ⊢𝓢
+⊢ₛ-adjust-push : ∀ {vs}
+  → Σₕ , Σₛ ⊢ₛ 𝓢
+  → Σₕ , Σₛ ⊢ₛ mkS (𝓢 .vars ++ vs) (𝓢 .refs)
+⊢ₛ-adjust-push {𝓢 = 𝓢} ⊢𝓢 = ⊢𝓢
 
 
-⊨-adjust-push-update : ∀ s
-  → ⟨ Σₕₛ ⟩⊢[ v₀ ⦂ (T ^ 𝟚) ]
-  → (⊨𝓔   : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢)
-  → ⟨ adjust-stack Σₕₛ (Σₕₛ 𝟚 ++ [ (T ^ 𝟚) ]) , (Γ , X s 𝟚 ⦂ (T ^ 𝟚) [ refl ]) ⟩⊨ ⟨ s ⇒ length (𝓢 .vars) , 𝓔 ⟩ / mkS (𝓢 .vars ++ [ v₀ ]) (𝓢 .refs)
+⊨-adjust-push-update : ∀ {S₁≤x} s
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v₀ ⦂ S ]
+  → (⊨𝓔   : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢)
+  → ⟨ Σₕ , Σₛ , (Γ , X s 𝟚 ⦂ S [ S₁≤x ]) ⟩⊨ ⟨ s ⇒ length (𝓢 .vars) , 𝓔 ⟩ / mkS (𝓢 .vars ++ [ v₀ ]) (𝓢 .refs)
 
-⊨-adjust-push-update {Σₕₛ = Σₕₛ} {v₀ = v₀}{T = T} {𝓢 = 𝓢} s′ ⊢v₀ ⊨𝓔
-  = mk-⊨ (λ{ (there x∈ x≢) → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , skip acc (x≢ ∘ sym) , ⊢ᵥ-adjust-push [ v₀ ] ⊢v})
-         (λ{ here → length (𝓢 .vars) , here , v₀ , ↓′-last (𝓢 .vars) , (⊢ᵥ-adjust-push [ v₀ ] ⊢v₀)
-           ; (there x∈ x≢) → let a , acc , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , there acc (x≢ ∘ sym) , v , ↓′-mono {vs = 𝓢 .vars} {vs′ = [ v₀ ]} a eq , ⊢ᵥ-adjust-push [ v₀ ] ⊢v})
+⊨-adjust-push-update  {v₀ = v₀}{𝓢 = 𝓢} s ⊢v₀ ⊨𝓔
+  = mk-⊨ (λ{ (there x∈ x≢) → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , skip acc (x≢ ∘ sym) , ⊢v })
+         (λ{ here → length (𝓢 .vars) , here , v₀ , ↓′-last (𝓢 .vars) , ⊢v₀
+           ; (there x∈ x≢) → let a , acc , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , there acc (x≢ ∘ sym) , v , ↓′-mono {vs = 𝓢 .vars} {vs′ = [ v₀ ]} a eq , ⊢v })
 
 -- value typing extends
 
-⊨-extend-Σ : Σₕₛ ≼ₕₛ Σₕₛ′ → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢 → ⟨ Σₕₛ′ , Γ ⟩⊨ 𝓔 / 𝓢
+⊨-extend-Σ : Σₕ ≼ Σₕ′ → Σₛ ≼ Σₛ′ → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → ⟨ Σₕ′ , Σₛ′ , Γ ⟩⊨ 𝓔 / 𝓢
 
-[⦂]-≼ₕₛ : Σₕₛ ≼ₕₛ Σₕₛ′ → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ] → ⟨ Σₕₛ′ ⟩⊢[ v ⦂ S ]
-[⦂]-≼ₕₛ Σ≼ TVUnit = TVUnit
-[⦂]-≼ₕₛ Σ≼ TVCst = TVCst
--- [⦂]-≼ₕₛ Σ≼ (TVClos ⊨𝓔 ≼𝓢 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S) = TVClos (⊨-extend-Σ Σ≼ ⊨𝓔) ≼𝓢 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S
-[⦂]-≼ₕₛ Σ≼ (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S) = TVClos {!!} 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S
-[⦂]-≼ₕₛ {Σₕₛ = Σₕₛ} Σ≼ (TVRef {q = q} ℓ< lkup≡ <⦂S)
-  with Σ≼ q in eq
-... | qts , eq1 = TVRef (≤ℕ-trans ℓ< (≼ₕₛ⇒length Σ≼ q)) (trans (lookup-from-i′ (Σₕₛ q) ℓ< eq1) lkup≡) <⦂S
+[⦂]-≼ₕₛ :  Σₕ ≼ Σₕ′ → Σₛ ≼ Σₛ′ → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ] → ⟨ Σₕ′ , Σₛ′ ⟩⊢[ v ⦂ S ]
+[⦂]-≼ₕₛ Σ≼ₕ Σ≼ₛ TVUnit = TVUnit
+[⦂]-≼ₕₛ Σ≼ₕ Σ≼ₛ TVCst = TVCst
+[⦂]-≼ₕₛ Σ≼ₕ Σ≼ₛ (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → ⊨-extend-Σ Σ≼ₕ Σ≼ₛ (∀⊨𝓔  𝓢′ 𝓢≼)) 𝓢≡ qbd ⊢e σ?≡ wf₂ <⦂S
+[⦂]-≼ₕₛ {Σₕ = Σₕ} {Σₛ = Σₛ} Σ≼ₕ@(qts , eq) Σ≼ₛ (TVRef {q = 𝟙} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (≼⇒length Σ≼ₕ)) (trans (lookup-from-i′ Σₕ ℓ< eq) lkup≡) <⦂S
+[⦂]-≼ₕₛ {Σₕ = Σₕ} {Σₛ = Σₛ} Σ≼ₕ Σ≼ₛ@(qts , eq) (TVRef {q = 𝟚} ℓ< lkup≡ <⦂S) = TVRef (≤ℕ-trans ℓ< (≼⇒length Σ≼ₛ)) (trans (lookup-from-i′ Σₛ ℓ< eq) lkup≡) <⦂S
+
 
 -- agreement extends
 
 
-⊨-extend-Σ Σ≼ ⊨Γ = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨Γ x∈ in v , acc , [⦂]-≼ₕₛ Σ≼ ⊢v)
-                        (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨Γ x∈ in a , sa , v , eq , [⦂]-≼ₕₛ Σ≼ ⊢v)
+⊨-extend-Σ Σ≼ₕ Σ≼ₛ ⊨Γ = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨Γ x∈ in v , acc , [⦂]-≼ₕₛ Σ≼ₕ Σ≼ₛ ⊢v)
+                             (λ x∈ → let a , sa , v , eq , ⊢v = ⊨-stack ⊨Γ x∈ in a , sa , v , eq , [⦂]-≼ₕₛ Σ≼ₕ Σ≼ₛ ⊢v)
 
 
 -- heap typing extends (needed?)
 
+{-
 ⊢ₕ-≼ₕₛ-aux : Σₕₛ ≼ₕₛ Σₕₛ′ → ∀ {Σₕ}
   → Pointwise ⟨ Σₕₛ ⟩⊢[_⦂_] 𝓗 Σₕ
   → Pointwise ⟨ Σₕₛ′ ⟩⊢[_⦂_] 𝓗 Σₕ
 ⊢ₕ-≼ₕₛ-aux Σ≼ [] = []
 ⊢ₕ-≼ₕₛ-aux Σ≼ (x∼y ∷ pws) = ([⦂]-≼ₕₛ Σ≼ x∼y) ∷ (⊢ₕ-≼ₕₛ-aux Σ≼ pws)
 
-{-
 ⊢ₕ-≼ₕₛ : Σₕₛ ≼ₕₛ Σₕₛ′ → Σₕₛ ⊢ₕ 𝓗 → Σₕₛ′ ⊢ₕ 𝓗
 ⊢ₕ-≼ₕₛ {Σₕₛ} Σ≼ ⊢𝓗 = {!⊢ₕ-≼ₕₛ-aux Σ≼ {Σₕₛ 𝟙} ⊢𝓗!}
 -}
 
+
 ⊨-extend-𝟙 : ∀ {S₁≤x} s T
-  → (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙)])
-  → ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢
-  → ⟨ Σₕₛ , (Γ , X s 𝟙 ⦂ (T ^ 𝟙) [ S₁≤x ]) ⟩⊨ ⟨ s ≔ v , 𝓔 ⟩ / 𝓢
+  → (⊢v : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙)])
+  → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢
+  → ⟨ Σₕ , Σₛ , (Γ , X s 𝟙 ⦂ (T ^ 𝟙) [ S₁≤x ]) ⟩⊨ ⟨ s ≔ v , 𝓔 ⟩ / 𝓢
 ⊨-extend-𝟙 {v = v} s T ⊢v ⊨𝓔 =
   mk-⊨ (λ{ here → v , here , ⊢v
        ; (there x∈ x≢) → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , there acc (x≢ ∘ sym) , ⊢v})
        (λ{ (there x∈ x≢) → let a , sa , v , eq , ⊢v = ⊨-stack ⊨𝓔 x∈ in a , (skip sa (x≢ ∘ sym)) , v , eq , ⊢v})
 
-access-soundness : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → Access 𝓔 (X s 𝟙) v → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+
+⊨𝓔-stack-𝟙 : q-Bound 𝟙 Γ → ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → ⟨ Σₕ , Σₛ′ , Γ ⟩⊨ 𝓔 / 𝓢
+⊢v-stack-𝟙 : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ] → ⟨ Σₕ , Σₛ′ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+
+⊢v-stack-𝟙 TVUnit = TVUnit
+⊢v-stack-𝟙 TVCst = TVCst
+⊢v-stack-𝟙 (TVClos {q = 𝟙} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S) = TVClos (λ 𝓢′ 𝓢≼ → ⊨𝓔-stack-𝟙 qbd (∀⊨𝓔 𝓢′ 𝓢≼)) 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S
+⊢v-stack-𝟙 (TVClos {q = 𝟚} ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ (SQual () x))
+⊢v-stack-𝟙 (TVRef {𝟙} ℓ< lkup≡ <⦂S) = TVRef ℓ< lkup≡ <⦂S
+⊢v-stack-𝟙 (TVRef {𝟚} ℓ< lkup≡ (SQual () x))
+
+⊨𝓔-stack-𝟙 qbd ⊨𝓔 = mk-⊨ (λ x∈ → let v , acc , ⊢v = ⊨-heap ⊨𝓔 x∈ in v , acc , ⊢v-stack-𝟙 ⊢v)
+                         (λ {s} {S} x∈ → contradiction x∈ (𝟙-bound⇒∀𝟚∉ qbd s S))
+
+access-soundness : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ X s 𝟙 ⦂ (T ^ 𝟙) → Access 𝓔 (X s 𝟙) v → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
 access-soundness Γ⊨ x∈ access
   with ⊨-heap Γ⊨ x∈
 ... | v , acc′ , ⊢v
@@ -930,11 +969,11 @@ access-soundness Γ⊨ x∈ access
 ¬x𝟙∈𝟚 : ¬ (Γ ∋ X s 𝟙 ⦂ mkQ 𝟚 T)
 ¬x𝟙∈𝟚 (there x∈ x≢) = ¬x𝟙∈𝟚 x∈
 
-genaccess-soundness : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ x ⦂ (T ^ q) → GenAccess 𝓔 x (inj₁ v) → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ q) ]
+genaccess-soundness : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ x ⦂ (T ^ q) → GenAccess 𝓔 x (inj₁ v) → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ q) ]
 genaccess-soundness {q = 𝟙} ⊨𝓔 x∈ (on-heap acc) = access-soundness ⊨𝓔 x∈ acc
 genaccess-soundness {q = 𝟚} ⊨𝓔 x∈ (on-heap acc) = contradiction x∈ ¬x𝟙∈𝟚
 
-genaccess-soundness-𝟚 : ⟨ Σₕₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ x ⦂ (T ^ q) → GenAccess 𝓔 x (inj₂ a) → ∀ v → just v ≡ 𝓢 ↓ᵥ a → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ q) ]
+genaccess-soundness-𝟚 : ⟨ Σₕ , Σₛ , Γ ⟩⊨ 𝓔 / 𝓢 → Γ ∋ x ⦂ (T ^ q) → GenAccess 𝓔 x (inj₂ a) → ∀ v → just v ≡ 𝓢 ↓ᵥ a → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ q) ]
 genaccess-soundness-𝟚 ⊨𝓔 x∈ (on-stack sa) v eq
   with ⊨-stack ⊨𝓔 x∈
 ... | a , sa′ , v′ , eq′ , ⊢v
@@ -944,12 +983,10 @@ genaccess-soundness-𝟚 ⊨𝓔 x∈ (on-stack sa) v eq
 
 
 
-
-<⦂-val-lift : ⟨ Σₕₛ ⟩⊢[ v ⦂ S₁ ] → S₁ <⦂ S₂ → ⟨ Σₕₛ ⟩⊢[ v ⦂ S₂ ]
-<⦂-val-lift TVUnit (SQual qsub SUnit) = TVUnit
-<⦂-val-lift TVCst (SQual qsub SBase) = TVCst
--- <⦂-val-lift (TVClos ⊨𝓔 ≼𝓢 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S₁) S₁<⦂S₂ = TVClos ⊨𝓔 ≼𝓢 𝓢≡ qbd ⊢e wf₁ wf₂ (<⦂-trans <⦂S₁ S₁<⦂S₂)
-<⦂-val-lift (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S₁) S₁<⦂S₂ = TVClos {!!} 𝓢≡ qbd ⊢e wf₁ wf₂ (<⦂-trans <⦂S₁ S₁<⦂S₂)
+<⦂-val-lift : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S₁ ] → S₁ <⦂ S₂ → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S₂ ]
+<⦂-val-lift TVUnit (SQual _ SUnit) = TVUnit
+<⦂-val-lift TVCst  (SQual _ SBase) = TVCst
+<⦂-val-lift (TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ <⦂S₁) S₁<⦂S₂ = TVClos ∀⊨𝓔 𝓢≡ qbd ⊢e wf₁ wf₂ (<⦂-trans <⦂S₁ S₁<⦂S₂)
 <⦂-val-lift (TVRef ℓ< lkup≡ <⦂S₁) S₁<⦂S₂ = TVRef ℓ< lkup≡ (<⦂-trans <⦂S₁ S₁<⦂S₂)
 
 
@@ -982,78 +1019,83 @@ length-write (write1 wr) = cong suc (length-write wr)
 ≼ₛ-swrite : swrite 𝓢 ℓ v 𝓢′ → 𝓢 ≼ₛ 𝓢′
 ≼ₛ-swrite (swrite0 wr) = ([] , ++-identityʳ _) , ≡⇒≤ (length-write wr)
 
-typed-read-aux : ∀ {q}{T : Typeof q}{Σₕ : List (Typeof q)}
-  → Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ (q ^^ T) ] ) 𝓗 Σₕ
+{-unused-}
+swrite-≼ₛ : swrite 𝓢 ℓ v 𝓢′ → 𝓢′ ≼ₛ 𝓢
+swrite-≼ₛ (swrite0 wr) = ([] , ++-identityʳ _) , ≡⇒≤ (sym (length-write wr))
+
+typed-read-aux : ∀ {q}{T : Typeof q}{Σᵣ : List (Typeof q)}
+  → Pointwise (λ v T → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (q ^^ T) ] ) 𝓗 Σᵣ
   → {ℓ : ℕ}
-  → (ℓ< : ℓ < length Σₕ)
-  → (lkup≡ : lookup Σₕ (fromℕ< ℓ<) ≡ T)
+  → (ℓ< : ℓ < length Σᵣ)
+  → (lkup≡ : lookup Σᵣ (fromℕ< ℓ<) ≡ T)
   → read 𝓗 ℓ v
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ (q ^^ T) ]
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (q ^^ T) ]
 typed-read-aux (x∼y ∷ pws) {zero} ℓ< refl read0 = x∼y
 typed-read-aux (x∼y ∷ pws) {suc ℓ} (s≤s ℓ<) lkup≡ (read1 rd) = typed-read-aux pws {ℓ} ℓ< lkup≡ rd
 
-typed-read : Σₕₛ ⊢ₕ 𝓗
-  → (ℓ< : ℓ < length (Σₕₛ 𝟙))
-  → (lkup≡ : lookup (Σₕₛ 𝟙) (fromℕ< ℓ<) ≡ T)
-  → read 𝓗 ℓ v
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
-typed-read {Σₕₛ = Σₕₛ} ⊢𝓗 ℓ< lkup≡ xread = typed-read-aux {Σₕ = Σₕₛ 𝟙}  ⊢𝓗 ℓ< lkup≡ xread 
-
-typed-sread : Σₕₛ ⊢ₛ 𝓢
-  → (ℓ< : ℓ < length (Σₕₛ 𝟚))
-  → (lkup≡ : lookup (Σₕₛ 𝟚) (fromℕ< ℓ<) ≡ S)
-  → sread 𝓢 ℓ v
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
-typed-sread {Σₕₛ = Σₕₛ} ⊢𝓢 ℓ< lkup≡ (sread0 xread) = typed-read-aux {Σₕ = Σₕₛ 𝟚} ⊢𝓢 ℓ< lkup≡ xread
-
-typed-write-aux : ∀ {q}{T : Typeof q}{Σₕ}
-  → Pointwise (λ w T → ⟨ Σₕₛ ⟩⊢[ w ⦂ (q ^^ T) ] ) 𝓗 Σₕ
-  → {ℓ : ℕ}
+typed-read : Σₕ ⊢ₕ 𝓗
   → (ℓ< : ℓ < length Σₕ)
   → (lkup≡ : lookup Σₕ (fromℕ< ℓ<) ≡ T)
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ (q ^^ T) ]
+  → read 𝓗 ℓ v
+  → ⟨ Σₕ , [] ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+typed-read {Σₕ = Σₕ} ⊢𝓗 ℓ< lkup≡ xread = typed-read-aux {Σᵣ = Σₕ}  ⊢𝓗 ℓ< lkup≡ xread 
+
+typed-sread : Σₕ , Σₛ ⊢ₛ 𝓢
+  → (ℓ< : ℓ < length Σₛ)
+  → (lkup≡ : lookup Σₛ (fromℕ< ℓ<) ≡ S)
+  → sread 𝓢 ℓ v
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]
+typed-sread {Σₛ = Σₛ} ⊢𝓢 ℓ< lkup≡ (sread0 xread) = typed-read-aux {Σᵣ = Σₛ} ⊢𝓢 ℓ< lkup≡ xread
+
+typed-write-aux : ∀ {q}{T : Typeof q}{Σᵣ}
+  → Pointwise (λ w T → ⟨ Σₕ , Σₛ ⟩⊢[ w ⦂ (q ^^ T) ] ) 𝓗 Σᵣ
+  → {ℓ : ℕ}
+  → (ℓ< : ℓ < length Σᵣ)
+  → (lkup≡ : lookup Σᵣ (fromℕ< ℓ<) ≡ T)
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (q ^^ T) ]
   → write 𝓗 ℓ v 𝓗′
-  → Pointwise (λ w T → ⟨ Σₕₛ ⟩⊢[ w ⦂ (q ^^ T) ] ) 𝓗′ Σₕ
+  → Pointwise (λ w T → ⟨ Σₕ , Σₛ ⟩⊢[ w ⦂ (q ^^ T) ] ) 𝓗′ Σᵣ
 typed-write-aux (x∼y ∷ pws) {zero} ℓ< refl ⊢v write0 = ⊢v ∷ pws
-typed-write-aux (x∼y ∷ pws) {suc ℓ} (s≤s ℓ<) lkup≡ ⊢v (write1 xwrite) = x∼y ∷ (typed-write-aux pws ℓ< lkup≡ ⊢v xwrite)
+typed-write-aux (x∼y ∷ pws) {suc ℓ} (s≤s ℓ<) lkup≡ ⊢v (write1 xwrite) = x∼y ∷ typed-write-aux pws ℓ< lkup≡ ⊢v xwrite
 
 typed-write : ∀ {T : Type 𝟙}
-  → Σₕₛ ⊢ₕ 𝓗
-  → (ℓ< : ℓ < length (Σₕₛ 𝟙))
-  → (lkup≡ : lookup (Σₕₛ 𝟙) (fromℕ< ℓ<) ≡ T)
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
+  → Σₕ ⊢ₕ 𝓗
+  → (ℓ< : ℓ < length Σₕ)
+  → (lkup≡ : lookup Σₕ (fromℕ< ℓ<) ≡ T)
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ (T ^ 𝟙) ]
   → write 𝓗 ℓ v 𝓗′
-  → Σₕₛ ⊢ₕ 𝓗′
-typed-write {Σₕₛ = Σₕₛ} ⊢𝓗 ℓ< lkup≡ ⊢v xwrite = typed-write-aux {Σₕ = Σₕₛ 𝟙} ⊢𝓗 ℓ< lkup≡ ⊢v xwrite
+  → Σₕ ⊢ₕ 𝓗′
+typed-write {Σₕ = Σₕ} ⊢𝓗 ℓ< lkup≡ ⊢v xwrite = typed-write-aux {Σᵣ = Σₕ} ⊢𝓗 ℓ< lkup≡ (⊢ᵥ-adjust-𝟙 ⊢v) xwrite
 
 typed-swrite : ∀ {S}
-  → Σₕₛ ⊢ₛ 𝓢
-  → (ℓ< : ℓ < length (Σₕₛ 𝟚))
-  → (lkup≡ : lookup (Σₕₛ 𝟚) (fromℕ< ℓ<) ≡ S)
-  → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]
+  → Σₕ , Σₛ ⊢ₛ 𝓢
+  → (ℓ< : ℓ < length Σₛ)
+  → (lkup≡ : lookup Σₛ (fromℕ< ℓ<) ≡ S)
+  → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]
   → swrite 𝓢 ℓ v 𝓢′
-  → Σₕₛ ⊢ₛ 𝓢′
-typed-swrite {Σₕₛ = Σₕₛ} ⊢𝓢 ℓ< lkup≡ ⊢v (swrite0 xwrite) = typed-write-aux {Σₕ = Σₕₛ 𝟚} ⊢𝓢 ℓ< lkup≡ ⊢v xwrite
+  → Σₕ , Σₛ ⊢ₛ 𝓢′
+typed-swrite {Σₛ = Σₛ} ⊢𝓢 ℓ< lkup≡ ⊢v (swrite0 xwrite) = typed-write-aux {Σᵣ = Σₛ} ⊢𝓢 ℓ< lkup≡ ⊢v xwrite
 
-⊢𝓗-extend-𝟙-aux : ∀ {Σₕ} → (T : Type 𝟙) (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ])
-  → (⊢𝓗    : Pointwise (λ v T → ⟨ Σₕₛ ⟩⊢[ v ⦂ T ^ 𝟙 ]) 𝓗 Σₕ)
-  → Pointwise (λ v T′ → ⟨ (extend-Σ Σₕₛ 𝟙 T) ⟩⊢[ v ⦂ (T′ ^ 𝟙)] ) (𝓗 ++ v ∷ []) (Σₕ ++ [ T ])
-⊢𝓗-extend-𝟙-aux T ⊢v [] = [⦂]-≼ₕₛ (≼ₕₛ-extend-Σ 𝟙 T) ⊢v ∷ []
-⊢𝓗-extend-𝟙-aux T ⊢v (x∼y ∷ ⊢𝓗) = [⦂]-≼ₕₛ (≼ₕₛ-extend-Σ 𝟙 T) x∼y ∷ (⊢𝓗-extend-𝟙-aux T ⊢v ⊢𝓗)
+⊢𝓗-extend-𝟙-aux : ∀ {Σᵣ} → (T : Type 𝟙) (⊢v : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ])
+  → (⊢𝓗    : Pointwise (λ v T → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ T ^ 𝟙 ]) 𝓗 Σᵣ)
+  → Pointwise (λ v T′ → ⟨ Σₕ ++ [ T ] , Σₛ ⟩⊢[ v ⦂ (T′ ^ 𝟙)] ) (𝓗 ++ v ∷ []) (Σᵣ ++ [ T ])
+⊢𝓗-extend-𝟙-aux T ⊢v [] = ([⦂]-≼ₕₛ ([ T ] , refl) ≼-refl ⊢v) ∷ []
+⊢𝓗-extend-𝟙-aux T ⊢v (x∼y ∷ ⊢𝓗) = [⦂]-≼ₕₛ ([ T ] , refl) ≼-refl x∼y ∷ (⊢𝓗-extend-𝟙-aux T ⊢v ⊢𝓗)
 
-⊢𝓗-extend-𝟙 : (T : Type 𝟙) (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ mkQ 𝟙 T ]) (⊢𝓗 : Σₕₛ ⊢ₕ 𝓗)
-  → Pointwise (λ v T′ → ⟨ (extend-Σ Σₕₛ 𝟙 T) ⟩⊢[ v ⦂ (T′ ^ 𝟙)] ) (𝓗 ++ v ∷ []) (Σₕₛ 𝟙 ++ [ T ])
+⊢𝓗-extend-𝟙 : (T : Type 𝟙) (⊢v : ⟨ Σₕ , [] ⟩⊢[ v ⦂ mkQ 𝟙 T ]) (⊢𝓗 : Σₕ ⊢ₕ 𝓗)
+  → Pointwise (λ v T′ → ⟨ Σₕ ++ [ T ] , [] ⟩⊢[ v ⦂ (T′ ^ 𝟙)] ) (𝓗 ++ v ∷ []) (Σₕ ++ [ T ])
 ⊢𝓗-extend-𝟙 T ⊢v ⊢𝓗 = ⊢𝓗-extend-𝟙-aux T ⊢v ⊢𝓗
 
-⊢𝓢-extend-𝟙-aux : ∀ {Σₛ} {xs : List Val} → (T : Type 𝟙)
-  → (⊢𝓢 : Pointwise (λ v S → ⟨ Σₕₛ ⟩⊢[ v ⦂ S ]) xs Σₛ)
-  → Pointwise (λ v S → ⟨ (extend-Σ Σₕₛ 𝟙 T) ⟩⊢[ v ⦂ S ]) xs Σₛ
+⊢𝓢-extend-𝟙-aux : ∀ {Σᵣ} {xs : List Val} → (T : Type 𝟙)
+  → (⊢𝓢 : Pointwise (λ v S → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ]) xs Σᵣ)
+  → Pointwise (λ v S → ⟨ Σₕ ++ [ T ] , Σₛ ⟩⊢[ v ⦂ S ]) xs Σᵣ
 ⊢𝓢-extend-𝟙-aux T [] = []
-⊢𝓢-extend-𝟙-aux T (x∼y ∷ ⊢𝓢) = ([⦂]-≼ₕₛ (≼ₕₛ-extend-Σ 𝟙 T) x∼y) ∷ (⊢𝓢-extend-𝟙-aux T ⊢𝓢)
+⊢𝓢-extend-𝟙-aux T (x∼y ∷ ⊢𝓢) = [⦂]-≼ₕₛ ([ T ] , refl) ≼-refl x∼y ∷ (⊢𝓢-extend-𝟙-aux T ⊢𝓢)
 
-⊢𝓢-extend-𝟙 : (T : Type 𝟙) → (⊢𝓢 : Σₕₛ ⊢ₛ 𝓢) → extend-Σ Σₕₛ 𝟙 T ⊢ₛ 𝓢
+⊢𝓢-extend-𝟙 : (T : Type 𝟙) → (⊢𝓢 : Σₕ , Σₛ ⊢ₛ 𝓢) → (Σₕ ++ [ T ]) , Σₛ ⊢ₛ 𝓢
 ⊢𝓢-extend-𝟙 T ⊢𝓢 = ⊢𝓢-extend-𝟙-aux T ⊢𝓢
 
+{- needed?
 ⊢𝓗-extend-𝟚-aux : ∀ {Σₛ} {xs : List Val} → (S : QType)
   → Pointwise (λ v T′ → ⟨ Σₕₛ ⟩⊢[ v ⦂ (T′ ^ 𝟙)]) xs Σₛ
   → Pointwise (λ v T′ → ⟨ (extend-Σ Σₕₛ 𝟚 S) ⟩⊢[ v ⦂ (T′ ^ 𝟙)] ) xs Σₛ
@@ -1062,18 +1104,22 @@ typed-swrite {Σₕₛ = Σₕₛ} ⊢𝓢 ℓ< lkup≡ ⊢v (swrite0 xwrite) = 
 
 ⊢𝓗-extend-𝟚 : (S : QType) → (⊢𝓗 : Σₕₛ ⊢ₕ 𝓗) → extend-Σ Σₕₛ 𝟚 S ⊢ₕ 𝓗
 ⊢𝓗-extend-𝟚 S ⊢𝓗 = ⊢𝓗-extend-𝟚-aux S ⊢𝓗
+-}
 
-⊢𝓢-extend-𝟚-aux : ∀ {Σₛ : List QType} {xs : List Val}
-  → (T : QType) (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ T ])
-  → (⊢𝓢 : Pointwise (λ v S′ → ⟨ Σₕₛ ⟩⊢[ v ⦂ S′ ]) xs Σₛ)
-  → Pointwise (λ v S′ → ⟨ (extend-Σ Σₕₛ 𝟚 T) ⟩⊢[ v ⦂ S′ ] ) (xs ++ [ v ]) (Σₛ ++ [ T ])
-⊢𝓢-extend-𝟚-aux T ⊢v [] = [⦂]-≼ₕₛ (≼ₕₛ-extend-Σ 𝟚 T) ⊢v ∷ []
-⊢𝓢-extend-𝟚-aux T ⊢v (x∼y ∷ pws) = ([⦂]-≼ₕₛ (≼ₕₛ-extend-Σ 𝟚 T) x∼y) ∷ ⊢𝓢-extend-𝟚-aux T ⊢v pws
 
-⊢𝓢-extend-𝟚 : (T : QType) (⊢v : ⟨ Σₕₛ ⟩⊢[ v ⦂ T ])
-  → (⊢𝓢 : Σₕₛ ⊢ₛ 𝓢)
-  → Pointwise (λ v T′ → ⟨ (extend-Σ Σₕₛ 𝟚 T) ⟩⊢[ v ⦂ T′ ]) (𝓢 .refs ++ [ v ]) (Σₕₛ 𝟚 ++ [ T ])
-⊢𝓢-extend-𝟚 S ⊢v ⊢𝓢 = ⊢𝓢-extend-𝟚-aux S ⊢v ⊢𝓢
+⊢𝓢-extend-𝟚-aux : ∀ {Σᵣ : List QType} {xs : List Val}
+  → (S : QType) (⊢v : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ])
+  → (⊢𝓢 : Pointwise (λ v S′ → ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S′ ]) xs Σᵣ)
+  → Pointwise (λ v S′ → ⟨ Σₕ , Σₛ ++ [ S ] ⟩⊢[ v ⦂ S′ ] ) (xs ++ [ v ]) (Σᵣ ++ [ S ])
+⊢𝓢-extend-𝟚-aux S ⊢v [] = [⦂]-≼ₕₛ ≼-refl ([ S ] , refl) ⊢v ∷ []
+⊢𝓢-extend-𝟚-aux S ⊢v (x∼y ∷ pws) = [⦂]-≼ₕₛ ≼-refl ([ S ] , refl) x∼y ∷ ⊢𝓢-extend-𝟚-aux S ⊢v pws
+
+⊢𝓢-extend-𝟚 : (S : QType)
+  → (⊢v : ⟨ Σₕ , Σₛ ⟩⊢[ v ⦂ S ])
+  → (⊢𝓢 : Σₕ , Σₛ ⊢ₛ 𝓢)
+  → Pointwise (λ v T′ → ⟨ Σₕ , Σₛ ++ [ S ] ⟩⊢[ v ⦂ T′ ]) (𝓢 .refs ++ [ v ]) (Σₛ ++ [ S ])
+⊢𝓢-extend-𝟚 S ⊢v ⊢𝓢 =  ⊢𝓢-extend-𝟚-aux S ⊢v ⊢𝓢
+
 
 {-
 postulate
@@ -1119,16 +1165,14 @@ _⊕_ : Env → (Var × Val × Address) → Env
 _⊕ₛ_ : Stack → (Var × Val) → Stack
 𝓢 ⊕ₛ (X s 𝟙 , v) = 𝓢
 𝓢 ⊕ₛ (X s 𝟚 , v) = push 𝓢 v
-{-
-alloc : Stack → Val → Stack × ℕ
-alloc 𝓢 v = push 𝓢 v , ∣ 𝓢 ∣ˢ
 
+valloc : Stack → Val → Stack × ℕ
+valloc 𝓢 v = push 𝓢 v , ∣ 𝓢 ∣ˢ
+
+{-
 alloc-length : ∀ 𝓢 → ∣ alloc 𝓢 v .proj₁ ∣ˢ ≡ suc ∣ 𝓢 ∣ˢ
 alloc-length {v = v} 𝓢 = trans (length-++ (𝓢 .head) {[ v ]}) (trans (+-suc (∣ 𝓢 ∣ˢ) zero) (cong suc (+-identityʳ ∣ 𝓢 ∣ˢ)))
 -}
-new-frame? : Qual → Stack → Stack
-new-frame? 𝟙 𝓢 = mkS [] []
-new-frame? 𝟚 𝓢 = 𝓢
 
 restore-frame? : Qual → Stack → Stack → Stack
 restore-frame? 𝟙 𝓢₁ 𝓢₂ = 𝓢₁
@@ -1138,76 +1182,6 @@ decode : Val ⊎ Address → Stack → Maybe Val
 decode (inj₁ v) 𝓢 = just v
 decode (inj₂ a) 𝓢 = 𝓢 ↓ᵥ a
 
-module obsolete where
-
-  data _,_,_⊢_⇓[_]_⊣_,_ : Env → Heap → Stack → Expr → Qual → Val → Heap → Stack → Set where
-
-
-    EAbsH :
-         𝓔 , 𝓗 , 𝓢 ⊢ lam 𝟙 x e 𝟙 ⇓[ 𝟙 ] clos 𝟙 𝓔 (mkS [] []) x e 𝟙 ⊣ 𝓗 , 𝓢
-
-    EAbsS :
-         𝓔 , 𝓗 , 𝓢 ⊢ lam q x e q₂ ⇓[ 𝟚 ] clos q 𝓔 𝓢 x e q₂ ⊣ 𝓗 , 𝓢
-
-    EAppH :
-           𝓔 , 𝓗  , 𝓢 ⊢ e₁ ⇓[ 𝟚  ] clos q 𝓔′ 𝓢ᶜ (X s q₂) e 𝟙 ⊣ 𝓗′ , 𝓢′
-         → 𝓔 , 𝓗′ , 𝓢′ ⊢ e₂ ⇓[ q₂ ] v₂ ⊣ 𝓗″ , 𝓢″
-         → (𝓔′ ⊕ (X s q₂ , v₂ , ∣ 𝓢″ ∣ˢ)) , 𝓗″ , new-frame? q 𝓢″ ⊕ₛ (X s q₂ , v₂) ⊢ e ⇓[ 𝟙 ] v ⊣ 𝓗‴ , 𝓢‴
-         → 𝓢⁗ ≡ restore-frame? q 𝓢″ 𝓢‴
-          ---------------------------------------------------------
-         → 𝓔 , 𝓗 , 𝓢 ⊢ app e₁ e₂ ⇓[ 𝟙 ] v ⊣ 𝓗‴ , 𝓢⁗
-         
-    EAppS :
-           𝓔 , 𝓗 , 𝓢 ⊢ e₁ ⇓[ 𝟚 ] clos q 𝓔′ 𝓢ᶜ (X s q₁) e q₂ ⊣ 𝓗′ , 𝓢′
-         → 𝓔 , 𝓗′ , 𝓢′ ⊢ e₂ ⇓[ q₁ ] v₂ ⊣ 𝓗″ , 𝓢″
-         → (𝓔′ ⊕ (X s q₁ , v₂ , ∣ 𝓢″ ∣ˢ)) , 𝓗″ , new-frame? q 𝓢″ ⊕ₛ (X s q₁ , v₂) ⊢ e ⇓[ q₂ ] v ⊣ 𝓗‴ , 𝓢‴
-         → 𝓢⁗ ≡ restore-frame? q 𝓢″ 𝓢‴
-          ---------------------------------------------------------
-         → 𝓔 , 𝓗 , 𝓢 ⊢ app e₁ e₂ ⇓[ 𝟚 ] v ⊣ 𝓗‴ , 𝓢⁗
-
-
-
-    ERefH :
-          𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ 𝟙 ] v ⊣ 𝓗′ , 𝓢′
-          ---------------------------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ ref 𝟙 e ⇓[ 𝟙 ] ref 𝟙 ∣ 𝓗′ ∣ʰ ⊣ 𝓗′ ++ [ v ] , 𝓢′
-
-
-    ERefS :
-          𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ q ] v ⊣ 𝓗′ , 𝓢′
-        → (q ≡ 𝟙 → 𝓢″ ≡ 𝓢′ × n ≡ ∣ 𝓗′ ∣ʰ × 𝓗″ ≡ 𝓗′ ++ [ v ])
-        → (q ≡ 𝟚 → 𝓗″ ≡ 𝓗′ × (𝓢″ , n) ≡ salloc 𝓢′ v)
-          --------------------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ ref q e ⇓[ 𝟚 ] ref q n ⊣ 𝓗″ , 𝓢″
-
-
-    EDerefH :
-          𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ 𝟙 ] ref 𝟙 ℓ ⊣ 𝓗′ , 𝓢′
-        → read 𝓗′ ℓ v
-          ----------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ deref 𝟙 e ⇓[ 𝟙 ] v ⊣ 𝓗′ , 𝓢′
-
-    EDerefS :
-          𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ 𝟚 ] ref q ℓ ⊣ 𝓗′ , 𝓢′
-        → (q ≡ 𝟙 → read 𝓗′ ℓ v)
-        → (q ≡ 𝟚 → sread 𝓢′ ℓ v)
-          -------------------------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ deref 𝟚 e ⇓[ 𝟚 ] v ⊣ 𝓗′ , 𝓢′
-
-    ESetrefH :
-          𝓔 , 𝓗 , 𝓢 ⊢ e₁ ⇓[ 𝟙 ] ref 𝟙 ℓ ⊣ 𝓗′ , 𝓢′
-        → 𝓔 , 𝓗′ , 𝓢′ ⊢ e₂ ⇓[ 𝟙 ] v ⊣ 𝓗″ , 𝓢″
-        → write 𝓗″ ℓ v 𝓗‴
-          ---------------------------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ setref e₁ e₂ ⇓[ 𝟙 ] unit ⊣ 𝓗‴ , 𝓢″
-
-    ESetrefS :
-          𝓔 , 𝓗 , 𝓢 ⊢ e₁ ⇓[ 𝟚 ] ref q ℓ ⊣ 𝓗′ , 𝓢′
-        → 𝓔 , 𝓗′ , 𝓢′ ⊢ e₂ ⇓[ q ] v ⊣ 𝓗″ , 𝓢″
-        → (q ≡ 𝟙 → write 𝓗″ ℓ v 𝓗‴ × 𝓢‴ ≡ 𝓢″)
-        → (q ≡ 𝟚 → 𝓗‴ ≡ 𝓗″ × swrite 𝓢″ ℓ v 𝓢‴)
-          ---------------------------------------------------------
-        → 𝓔 , 𝓗 , 𝓢 ⊢ setref e₁ e₂ ⇓[ 𝟚 ] unit ⊣ 𝓗‴ , 𝓢‴
 
 -- H,S ⊢ c ⇓q s c ⊣ S
 data _,_,_⊢_⇓[_]_⊣_,_
@@ -1217,25 +1191,23 @@ data _,_,_⊢_⇓[_]_⊣_,_
   EUnit  :
         𝓔 , 𝓗 , 𝓢 ⊢ unit ⇓[ q ] unit ⊣ 𝓗 , 𝓢
 
-  EVarH :
-        Access 𝓔 (X s 𝟙) v
-       → 𝓔 , 𝓗 , 𝓢 ⊢ var (X s 𝟙) ⇓[ 𝟙 ] v ⊣ 𝓗 , 𝓢
-
-  EVarS :
+  EVar :
         GenAccess 𝓔 x va
        → just v ≡ decode va 𝓢
-       → 𝓔 , 𝓗 , 𝓢 ⊢ var x ⇓[ 𝟚 ] v ⊣ 𝓗 , 𝓢
+       → 𝓔 , 𝓗 , 𝓢 ⊢ var x ⇓[ q ] v ⊣ 𝓗 , 𝓢
 
   EAbs : ∀ {𝓢ᶜ}
        → q₁ ≤ q
        → q₂ ≤ q
-       → (case q₁ of λ{ 𝟙 → 𝓢ᶜ ≡ mkS [] [] ; 𝟚 → 𝓢ᶜ ≡ 𝓢 })
-       → 𝓔 , 𝓗 , 𝓢 ⊢ lam q₁ x e q₂ ⇓[ q ] clos q₁ 𝓔 𝓢ᶜ x e q₂ ⊣ 𝓗 , 𝓢
+       → case q₁ of (λ{ 𝟙 → 𝓢ᶜ ≡ 𝓢∅ ; 𝟚 → 𝓢ᶜ ≡ 𝓢 })
+       → q-Bounded-Env q₁ 𝓔 𝓔′
+       → 𝓔 , 𝓗 , 𝓢 ⊢ lam q₁ x e q₂ ⇓[ q ] clos q₁ 𝓔′ 𝓢ᶜ x e q₂ ⊣ 𝓗 , 𝓢
        
   EApp : q₂ ≤ q₀
        → 𝓔 , 𝓗 , 𝓢 ⊢ e₁ ⇓[ 𝟚 ] clos q 𝓔′ 𝓢ᶜ (X s q₁) e q₂ ⊣ 𝓗′ , 𝓢′
        → 𝓔 , 𝓗′ , 𝓢′ ⊢ e₂ ⇓[ q₁ ] v₂ ⊣ 𝓗″ , 𝓢″
-       → (𝓔′ ⊕ (X s q₁ , v₂ , ∣ 𝓢″ ∣ˢ)) , 𝓗″ , new-frame? q 𝓢″ ⊕ₛ (X s q₁ , v₂) ⊢ e ⇓[ q₂ ] v ⊣ 𝓗‴ , 𝓢‴
+       → let 𝓢ₙ = new-frame? q 𝓢″
+       in (𝓔′ ⊕ (X s q₁ , v₂ , ∣ 𝓢ₙ ∣ˢ)) , 𝓗″ , 𝓢ₙ ⊕ₛ (X s q₁ , v₂) ⊢ e ⇓[ q₀ ] v ⊣ 𝓗‴ , 𝓢‴ -- q₀ was q₂
        → 𝓢⁗ ≡ restore-frame? q 𝓢″ 𝓢‴
         ---------------------------------------------------------
        → 𝓔 , 𝓗 , 𝓢 ⊢ app e₁ e₂ ⇓[ q₀ ] v ⊣ 𝓗‴ , 𝓢⁗
@@ -1243,17 +1215,17 @@ data _,_,_⊢_⇓[_]_⊣_,_
 
   ERef :  q₁ ≤ q
       → 𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ q₁ ] v ⊣ 𝓗′ , 𝓢′
-      → case q of (λ{ 𝟙 → 𝓢″ ≡ 𝓢′ × n ≡ ∣ 𝓗′ ∣ʰ × 𝓗″ ≡ 𝓗′ ++ [ v ]
-                    ; 𝟚 → 𝓗″ ≡ 𝓗′ × (𝓢″ , n) ≡ salloc 𝓢′ v })
+      → case q₁ of (λ{ 𝟙 → 𝓢″ ≡ 𝓢′ × n ≡ ∣ 𝓗′ ∣ʰ × 𝓗″ ≡ 𝓗′ ++ [ v ]
+                     ; 𝟚 → 𝓗″ ≡ 𝓗′ × (𝓢″ , n) ≡ salloc 𝓢′ v })
         --------------------------------------------------
       → 𝓔 , 𝓗 , 𝓢 ⊢ ref q₁ e ⇓[ q ] ref q₁ n ⊣ 𝓗″ , 𝓢″
 
 
-  EDeref :  q₁ ≤ q
-      → 𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ 𝟚 ] ref q₁ ℓ ⊣ 𝓗′ , 𝓢′
-      → case q of (λ{ 𝟙 → read 𝓗′ ℓ v ; 𝟚 → sread 𝓢′ ℓ v })
+  EDeref :
+        𝓔 , 𝓗 , 𝓢 ⊢ e ⇓[ 𝟚 ] ref q₁ ℓ ⊣ 𝓗′ , 𝓢′
+      → case q₁ of (λ{ 𝟙 → read 𝓗′ ℓ v ; 𝟚 → sread 𝓢′ ℓ v })
         ----------------------------------------------------
-      → 𝓔 , 𝓗 , 𝓢 ⊢ deref q e ⇓[ q ] v ⊣ 𝓗′ , 𝓢′
+      → 𝓔 , 𝓗 , 𝓢 ⊢ deref e ⇓[ q ] v ⊣ 𝓗′ , 𝓢′
 
 
   ESetref :

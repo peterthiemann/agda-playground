@@ -20,7 +20,7 @@ open Eq using (_≡_; refl; sym; trans; cong; subst)
 
 open import Qualifiers
 open import Auxiliary
-open import Simple.StackBasedBigStep1
+open import Simple.StackBasedBigStep
 
 
 -- wellformed values and environments
