@@ -48,6 +48,10 @@ trans-≈ : Transitive _≈_
 trans-≈ = IsEquivalence.trans
             (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
 
+trans-< : Transitive _<_
+trans-< = IsStrictPartialOrder.trans
+            (isStrictPartialOrder isStrictTotalOrder)
+
 --
 postulate
   ext : ∀ {a}{b} {A : Set a}{B : A → Set b} (f g : (x : A) → B x) → 
@@ -76,8 +80,7 @@ _≤_ : Carrier → Carrier → Set _
 x ≤ y = x < y ⊎ x ≈ y
 
 <-trans : ∀ {x y z} → x < y → y ≤ z → x < z
-<-trans x<y (inj₁ y<z) = IsStrictPartialOrder.trans
-                           (isStrictPartialOrder isStrictTotalOrder) x<y y<z
+<-trans x<y (inj₁ y<z) = trans-< x<y y<z
 <-trans x<y (inj₂ y≈z) = <-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₁ y≈z x<y
 
 ≤-resp-≈ : ∀ {x y z} → x ≤ y → y ≈ z → x ≤ z
@@ -151,20 +154,12 @@ x≈z-x<y⇒z<y x≈z x<y
 ≈-∷ y′≈x′ (x ∷ xs) = proj₂
                       (<-resp-≈
                        (isStrictPartialOrder isStrictTotalOrder))
-                      (IsEquivalence.sym
-                       (isEquivalence
-                        (isStrictPartialOrder isStrictTotalOrder))
-                       y′≈x′)
-                      x
-                      ∷ xs
+                      (sym-≈ y′≈x′) x ∷ xs
 
 head-is-min : (x : Carrier) {xs′ : List Carrier} (xs : FreshOrderedList (x ∷ xs′)) → ∀ {y} → y ∈ Linked.tail xs → x < y
 head-is-min x {y ∷ _} (x<y ∷ xs) (here px) = <-resp-≈
                                                (isStrictPartialOrder isStrictTotalOrder) .proj₁
-                                               (IsEquivalence.sym
-                                                (isEquivalence
-                                                 (isStrictPartialOrder isStrictTotalOrder))
-                                                px)
+                                               (sym-≈ px)
                                                x<y
 head-is-min x {y ∷ _} (x<y ∷ xs) (there y∈tail) = IsStrictTotalOrder.trans isStrictTotalOrder x<y (head-is-min y xs y∈tail)  
 
@@ -174,8 +169,7 @@ fresh-ordered⇒¬in x xs x∈tail = ¬x<x (head-is-min x xs x∈tail)
 fresh-ordered-head : ∀ {x} {y} {xs} → x ≈ y  → FreshOrderedList (y ∷ xs) → FreshOrderedList (x ∷ xs)
 fresh-ordered-head x≈y Linked.[-] = Linked.[-]
 fresh-ordered-head x≈y (x ∷ fox) = <-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂
-                                     (IsEquivalence.sym
-                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y)
+                                     (sym-≈ x≈y)
                                      x ∷ fox
 
 ∈-irrelevant : (x : Carrier) {xs′ : List Carrier} (xs : FreshOrderedList xs′) → (p q : x ∈ xs) → p ≡ q
@@ -185,14 +179,10 @@ fresh-ordered-head x≈y (x ∷ fox) = <-resp-≈ (isStrictPartialOrder isStrict
 ∈-irrelevant x {.(_ ∷ _ ∷ _)} (x₁ ∷ xs) (there p) (there q) = cong there (∈-irrelevant x xs p q)
 
 ∈-in-range : {xs : List Carrier} {x x₀ : Carrier} → x₀ ∈′ (x ∷ xs) → FreshOrderedList (x ∷ xs) → x ≤ x₀
-∈-in-range (here px) fox = inj₂
-                             (IsEquivalence.sym
-                              (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
+∈-in-range (here px) fox = inj₂ (sym-≈ px)
 ∈-in-range (there x₀∈) (x₁<x₂ ∷ fox)
   with ∈-in-range x₀∈ fox
-... | inj₁ x = inj₁
-                 (IsStrictPartialOrder.trans
-                  (isStrictPartialOrder isStrictTotalOrder) x₁<x₂ x)
+... | inj₁ x = inj₁ (trans-< x₁<x₂ x)
 ... | inj₂ y = inj₁
                  (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₁ y x₁<x₂)
 
@@ -282,19 +272,15 @@ insert x {x₁ ∷ x₂ ∷ xs′} (x₁<x₂ ∷ xs)
 
 insert-elem : ∀ {x} {ys′} → (ys : FreshOrderedList ys′)
   → x ∈ insert x ys
-insert-elem {x} {[]} Linked.[] = here (IsEquivalence.refl
-                                         (isEquivalence (isStrictPartialOrder isStrictTotalOrder)))
+insert-elem {x} {[]} Linked.[] = here (refl-≈)
 insert-elem {x} {y ∷ ys′} Linked.[-]
   with compare isStrictTotalOrder x y
-... | tri< x<y ¬b ¬c = here (IsEquivalence.refl
-                               (isEquivalence (isStrictPartialOrder isStrictTotalOrder)))
+... | tri< x<y ¬b ¬c = here (refl-≈)
 ... | tri≈ ¬a x≈y ¬c = here x≈y
-... | tri> ¬a ¬b y<x = there (here (IsEquivalence.refl
-                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder))))
+... | tri> ¬a ¬b y<x = there (here (refl-≈))
 insert-elem {x} {y ∷ ys′} (y₁<y₂ ∷ ys)
   with compare isStrictTotalOrder x y
-... | tri< x<y ¬b ¬c = here (IsEquivalence.refl
-                               (isEquivalence (isStrictPartialOrder isStrictTotalOrder)))
+... | tri< x<y ¬b ¬c = here (refl-≈)
 ... | tri≈ ¬a x≈y ¬c = here x≈y
 ... | tri> ¬a ¬b y<x = there (insert-elem ys)
 
@@ -342,8 +328,7 @@ Linked.[-] ─′ here px = Linked.[]
 (x ∷ Linked.[-]) ─′ here px = Linked.[-]
 (x ∷ x₁ ∷ xs) ─′ here px = x₁ ∷ xs
 (x ∷ Linked.[-]) ─′ there (here px) = Linked.[-]
-(x₁<x₂ ∷ x₂<x₃ ∷ xs<) ─′ there (here px) = (IsStrictPartialOrder.trans
-                                              (isStrictPartialOrder isStrictTotalOrder) x₁<x₂ x₂<x₃) ∷ xs<
+(x₁<x₂ ∷ x₂<x₃ ∷ xs<) ─′ there (here px) = (trans-< x₁<x₂ x₂<x₃) ∷ xs<
 (x₁<x₂ ∷ x₂<x₃ ∷ xs<) ─′ there (there x∈) = x₁<x₂ ∷ ((x₂<x₃ ∷ xs<) ─′ there x∈)
 
 ----------------------------------------------------------------------
@@ -396,7 +381,7 @@ union {(x ∷ [])} {(y ∷ [])} Linked.[-] Linked.[-]
 union {(x ∷ [])} {(y₁ ∷ y₂ ∷ ys′)} Linked.[-] (y₁<y₂ ∷ ys)
   with compare isStrictTotalOrder x y₁
 ... | tri< x<y₁ ¬b ¬c = x<y₁ ∷ y₁<y₂ ∷ ys
-... | tri≈ ¬a x≈y₁ ¬c = x≈z-x<y⇒z<y (IsEquivalence.sym (isEquivalence isStrictTotalOrder) x≈y₁) y₁<y₂ ∷ ys
+... | tri≈ ¬a x≈y₁ ¬c = x≈z-x<y⇒z<y (sym-≈ x≈y₁) y₁<y₂ ∷ ys
 ... | tri> ¬a ¬b y₁<x
   with compare isStrictTotalOrder x y₂
 ... | tri< x<y₂ ¬b₁ ¬c = y₁<x ∷ x<y₂ ∷ ys
@@ -429,10 +414,7 @@ union {(x₁ ∷ x₂ ∷ xs′)} {(y₁ ∷ y₂ ∷ ys′)} (x₁<x₂ ∷ xs)
   = x₁<x₂ ∷ ih
 ... | tri≈ ¬a x₂≈y₁ ¬c₁
   with ih ← union xs ys
-  rewrite lemma-union₀-l {xs = xs′}{ys = ys′} (x≈z-x<y⇒z<y (IsEquivalence.sym
-                       (IsStrictPartialOrder.isEquivalence
-                        (isStrictPartialOrder isStrictTotalOrder))
-                       x₂≈y₁) y₁<y₂) = x₁<x₂ ∷ ih
+  rewrite lemma-union₀-l {xs = xs′}{ys = ys′} (x≈z-x<y⇒z<y (sym-≈ x₂≈y₁) y₁<y₂) = x₁<x₂ ∷ ih
 ... | tri> ¬a ¬b₁ y₁<x₂
   with ih ← union xs (y₁<y₂ ∷ ys)
   rewrite lemma-union₀-r {xs = xs′}{ys = y₂ ∷ ys′} y₁<x₂
@@ -456,8 +438,7 @@ union {(x₁ ∷ x₂ ∷ xs′)} {(y₁ ∷ y₂ ∷ ys′)} (x₁<x₂ ∷ xs)
 ... | tri≈ ¬a₁ x₂≈y₂ ¬c₁
   = x₁<x₂ ∷ ih
 ... | tri> ¬a₁ ¬b y₂<x₂
-  = x≈z-x<y⇒z<y (IsEquivalence.sym (IsStrictPartialOrder.isEquivalence
-                        (isStrictPartialOrder isStrictTotalOrder)) x₁≈y₁) y₁<y₂ ∷ ih
+  = x≈z-x<y⇒z<y (sym-≈ x₁≈y₁) y₁<y₂ ∷ ih
 
 --
 
@@ -592,8 +573,7 @@ extend-<< x<<xs (x ∷ fox) = x<<xs ∷ extend-<< x fox
 
 lemma-ordered-tail : ∀ {x y ys} → x < y → FreshOrderedList (y ∷ ys) → x << ys
 lemma-ordered-tail x<y Linked.[-] = Level.lift Agda.Builtin.Unit.tt
-lemma-ordered-tail x<y (y₁<y₂ ∷ ys<) = IsStrictPartialOrder.trans
-                                     (isStrictPartialOrder isStrictTotalOrder) x<y y₁<y₂
+lemma-ordered-tail x<y (y₁<y₂ ∷ ys<) = trans-< x<y y₁<y₂
 
 {-# TERMINATING #-}
 lemma-intersect₀-head : ∀ {x} ys zs → FreshOrderedList ys → FreshOrderedList zs → x << ys → x << zs
@@ -618,23 +598,13 @@ lemma-intersect₀-head′ (x ∷ ys) [] foy foz x₁≈x₂ x₁<< x₂<< = Lev
 lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy foz x₁≈x₂ x₁<< x₂<<
   with compare isStrictTotalOrder y z
 lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) Linked.[-] foz x₁≈x₂ x₁<< x₂<< | tri< y<z ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) Linked.[] foz (refl-≈) (Level.lift Agda.Builtin.Unit.tt) y<z
-lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) (x ∷ foy) foz x₁≈x₂ x₁<< x₂<< | tri< a ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) foy foz (refl-≈) (IsStrictPartialOrder.trans
-                                                                                                                                                                                      (isStrictPartialOrder isStrictTotalOrder) x₁<< x) (IsStrictPartialOrder.trans
-                                                                                                                                                                                                                                           (isStrictPartialOrder isStrictTotalOrder) x₁<< a)
+lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) (x ∷ foy) foz x₁≈x₂ x₁<< x₂<< | tri< a ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) foy foz (refl-≈) (trans-< x₁<< x) (trans-< x₁<< a)
 ... | tri≈ ¬a b ¬c = x₁<<
-lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy Linked.[-] x₁≈x₂ x₁<< x₂<< | tri> ¬a ¬b c = lemma-intersect₀-head′ (y ∷ ys) zs foy Linked.[] (IsEquivalence.refl
-                                                                                                                                             (IsStrictPartialOrder.isEquivalence
-                                                                                                                                              (isStrictPartialOrder isStrictTotalOrder))) c (Level.lift Agda.Builtin.Unit.tt)
-lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy (x ∷ foz) x₁≈x₂ x₁<< x₂<< | tri> ¬a ¬b c = lemma-intersect₀-head′ (y ∷ ys) zs foy foz (IsEquivalence.refl
-                                                                                                                                      (IsStrictPartialOrder.isEquivalence
-                                                                                                                                       (isStrictPartialOrder isStrictTotalOrder))) x₁<< (IsStrictPartialOrder.<-resp-≈
+lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy Linked.[-] x₁≈x₂ x₁<< x₂<< | tri> ¬a ¬b c = lemma-intersect₀-head′ (y ∷ ys) zs foy Linked.[] (refl-≈) c (Level.lift Agda.Builtin.Unit.tt)
+lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy (x ∷ foz) x₁≈x₂ x₁<< x₂<< | tri> ¬a ¬b c = lemma-intersect₀-head′ (y ∷ ys) zs foy foz (refl-≈) x₁<< (IsStrictPartialOrder.<-resp-≈
                                                                                                                                                                                            (isStrictPartialOrder isStrictTotalOrder) .proj₂
-                                                                                                                                                                                           (IsEquivalence.sym
-                                                                                                                                                                                            (IsStrictPartialOrder.isEquivalence
-                                                                                                                                                                                             (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                                                                                            x₁≈x₂)
-                                                                                                                                                                                           (IsStrictPartialOrder.trans
-                                                                                                                                                                                            (isStrictPartialOrder isStrictTotalOrder) x₂<< x))
+                                                                                                                                                                                           (sym-≈ x₁≈x₂)
+                                                                                                                                                                                           (trans-< x₂<< x))
 
 
 {-# TERMINATING #-}
@@ -751,8 +721,7 @@ lemma-difference₀ {x}{y}{xs = x₁ ∷ xs} x<y x<<xs fox
   with compare isStrictTotalOrder x₁ y
 ... | tri< a ¬b ¬c = x<<xs
 lemma-difference₀ {x} {y} {x₁ ∷ xs} x<y x<<xs Linked.[-] | tri≈ ¬a b ¬c = Level.lift Agda.Builtin.Unit.tt
-lemma-difference₀ {x} {y} {x₁ ∷ xs} x<y x<<xs (x₂ ∷ fox) | tri≈ ¬a b ¬c = IsStrictPartialOrder.trans
-                                                                            (isStrictPartialOrder isStrictTotalOrder) x<<xs x₂
+lemma-difference₀ {x} {y} {x₁ ∷ xs} x<y x<<xs (x₂ ∷ fox) | tri≈ ¬a b ¬c = trans-< x<<xs x₂
 ... | tri> ¬a ¬b c = x<<xs
 
 
@@ -765,10 +734,10 @@ lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys fox foy
 ... | tri< x₁<x₂ ¬b ¬c = x<<xs
 lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys Linked.[-] Linked.[-] | tri≈ ¬a x₁≈x₂ ¬c = Level.lift Agda.Builtin.Unit.tt
 lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys Linked.[-] (x₂ ∷ foy) | tri≈ ¬a x₁≈x₂ ¬c = Level.lift Agda.Builtin.Unit.tt
-lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys (x₂ ∷ fox) Linked.[-] | tri≈ ¬a x₁≈x₂ ¬c = IsStrictPartialOrder.trans (isStrictPartialOrder isStrictTotalOrder) x<<xs x₂
-lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys (x₂ ∷ fox) (x₃ ∷ foy) | tri≈ ¬a x₁≈x₂ ¬c = lemma-difference₁ {x} {xs} {ys} (IsStrictPartialOrder.trans (isStrictPartialOrder isStrictTotalOrder) x<<xs x₂) (IsStrictPartialOrder.trans (isStrictPartialOrder isStrictTotalOrder) x<<ys x₃) fox foy
+lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys (x₂ ∷ fox) Linked.[-] | tri≈ ¬a x₁≈x₂ ¬c = trans-< x<<xs x₂
+lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys (x₂ ∷ fox) (x₃ ∷ foy) | tri≈ ¬a x₁≈x₂ ¬c = lemma-difference₁ {x} {xs} {ys} (trans-< x<<xs x₂) (trans-< x<<ys x₃) fox foy
 lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys fox Linked.[-] | tri> ¬a ¬b x₂<x₁ = x<<xs
-lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys fox (x₂ ∷ foy) | tri> ¬a ¬b x₂<x₁ =  lemma-difference₁ {x} {xs = x₁ ∷ xs} {ys} x<<xs (IsStrictPartialOrder.trans (isStrictPartialOrder isStrictTotalOrder) x<<ys x₂) fox foy
+lemma-difference₁ {x} {x₁ ∷ xs} {y₁ ∷ ys} x<<xs x<<ys fox (x₂ ∷ foy) | tri> ¬a ¬b x₂<x₁ =  lemma-difference₁ {x} {xs = x₁ ∷ xs} {ys} x<<xs (trans-< x<<ys x₂) fox foy
 
 
 {-# TERMINATING #-}
@@ -798,6 +767,17 @@ difference {x₁ ∷ x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} (x₁<x₂ ∷ xs<) (y�
   using ih ← difference xs< (y₁<y₂ ∷ ys<) = extend-<< (lemma-difference₁ {x₁} {x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} x₁<x₂ x<y xs< (y₁<y₂ ∷ ys<)) ih
 ... | tri≈ ¬a x≈y ¬c = difference xs< ys<
 ... | tri> ¬a ¬b y<x = difference (x₁<x₂ ∷ xs<) ys<
+
+difference⁺ : {xs ys : List Carrier} {x₀ : Carrier} → (xs< : FreshOrderedList xs) (ys< : FreshOrderedList ys)
+  → x₀ ∈ xs< → x₀ ∉ ys< → x₀ ∈ difference xs< ys<
+difference⁺ Linked.[-] Linked.[] x₀∈xs x₀∉ys = x₀∈xs
+difference⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] x₀∈xs x₀∉ys
+  with compare isStrictTotalOrder x₁ y₁
+... | tri< x<y ¬b ¬c = x₀∈xs
+difference⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) x₀∉ys | tri≈ ¬a x≈y ¬c = contradiction (here (trans-≈ px x≈y)) x₀∉ys
+... | tri> ¬a ¬b y<x = x₀∈xs
+difference⁺ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x₀∈xs x₀∉ys = {!!}
+difference⁺ (x ∷ xs<) ys< x₀∈xs x₀∉ys = {!!}
 
 
 difference⁻ : ∀ {xs ys x₀} → (xs< : FreshOrderedList xs) (ys< : FreshOrderedList ys)
