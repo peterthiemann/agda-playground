@@ -3,7 +3,7 @@ import Agda.Builtin.Unit
 open import Data.Unit.Polymorphic using (⊤; tt)
 open import Data.Empty
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; sym; trans; cong)
-open import Relation.Binary using (StrictTotalOrder; IsStrictTotalOrder; IsStrictPartialOrder; IsEquivalence; tri<; tri≈; tri>; Monotonic₁)
+open import Relation.Binary using (StrictTotalOrder; IsStrictTotalOrder; IsStrictPartialOrder; IsEquivalence; tri<; tri≈; tri>; Monotonic₁; Reflexive; Symmetric; Transitive)
 open import Relation.Unary using (Pred)
 open import Data.Fin using (Fin; zero; suc)
 open import Data.Nat using (ℕ)
@@ -35,6 +35,18 @@ open import Data.List.Membership.Setoid (record
                                                isEquivalence
                                                (isStrictPartialOrder isStrictTotalOrder)
                                            }) renaming (_∈_ to _∈′_; _∉_ to _∉′_)
+
+refl-≈ : Reflexive _≈_
+refl-≈ = IsEquivalence.refl
+           (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
+
+sym-≈ : Symmetric _≈_
+sym-≈ = IsEquivalence.sym
+          (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
+
+trans-≈ : Transitive _≈_
+trans-≈ = IsEquivalence.trans
+            (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
 
 --
 postulate
@@ -71,9 +83,7 @@ x ≤ y = x < y ⊎ x ≈ y
 ≤-resp-≈ : ∀ {x y z} → x ≤ y → y ≈ z → x ≤ z
 ≤-resp-≈ (inj₁ x<y) y≈z = inj₁
                             (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₁ y≈z x<y)
-≤-resp-≈ (inj₂ x≈y) y≈z = inj₂
-                            (IsEquivalence.trans
-                             (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y y≈z)
+≤-resp-≈ (inj₂ x≈y) y≈z = inj₂ (trans-≈ x≈y y≈z)
 
 ≤⇒≈ : ∀ {x y} → x ≤ y → ¬ x < y → x ≈ y
 ≤⇒≈ (inj₁ x<y) ¬x<y = contradiction x<y ¬x<y
@@ -535,40 +545,24 @@ union⁺ʳ {xs} {ys} Linked.[] ys< x∈xs = x∈xs
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] Linked.[-] x∈xs
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = there x∈xs
-union⁺ʳ {x₁ ∷ []} {y₁ ∷ .[]} Linked.[-] Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here
-                                                                                  (IsEquivalence.trans
-                                                                                   (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px
-                                                                                   (IsEquivalence.sym
-                                                                                    (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y))
+union⁺ʳ {x₁ ∷ []} {y₁ ∷ .[]} Linked.[-] Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here (trans-≈ px (sym-≈ x≈y))
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ .[]} Linked.[-] Linked.[-] (here px) | tri> ¬a ¬b y<x = here px
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x∈ys
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = there x∈ys
-union⁺ʳ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here
-                                                                                          (IsEquivalence.trans
-                                                                                           (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px
-                                                                                           (IsEquivalence.sym
-                                                                                            (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y))
+union⁺ʳ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here (trans-≈ px (sym-≈ x≈y))
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (there x∈ys) | tri≈ ¬a x≈y ¬c = there x∈ys
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri> ¬a ¬b y<x = here px
 union⁺ʳ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (there x∈ys) | tri> ¬a ¬b y<x =  there (union⁺ʳ Linked.[-] ys< x∈ys)
 union⁺ʳ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈ys
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = there (union⁺ʳ xs< Linked.[-] x∈ys)
-union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here
-                                                                                          (IsEquivalence.trans
-                                                                                           (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px
-                                                                                           (IsEquivalence.sym
-                                                                                            (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y))
+union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here (trans-≈ px (sym-≈ x≈y))
 union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri> ¬a ¬b y<x = here px
 union⁺ʳ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈ys
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = there (union⁺ʳ xs<  (y₁<y₂ ∷ ys<) x∈ys)
-union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here
-                                                                                                   (IsEquivalence.trans
-                                                                                                    (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px
-                                                                                                    (IsEquivalence.sym
-                                                                                                     (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) x≈y))
+union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here (trans-≈ px (sym-≈ x≈y))
 union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈ys) | tri≈ ¬a x≈y ¬c = there (union⁺ʳ xs< ys< x∈ys)
 union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri> ¬a ¬b y<x = here px
 union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈ys) | tri> ¬a ¬b y<x = there (union⁺ʳ (x₁<x₂ ∷ xs<) ys< x∈ys)
@@ -623,12 +617,8 @@ lemma-intersect₀-head′ [] (x ∷ zs) foy foz x₁≈x₂ x₁<< x₂<< = Lev
 lemma-intersect₀-head′ (x ∷ ys) [] foy foz x₁≈x₂ x₁<< x₂<< = Level.lift Agda.Builtin.Unit.tt
 lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) foy foz x₁≈x₂ x₁<< x₂<<
   with compare isStrictTotalOrder y z
-lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) Linked.[-] foz x₁≈x₂ x₁<< x₂<< | tri< y<z ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) Linked.[] foz (IsEquivalence.refl
-                                                                                                                                             (IsStrictPartialOrder.isEquivalence
-                                                                                                                                              (isStrictPartialOrder isStrictTotalOrder))) (Level.lift Agda.Builtin.Unit.tt) y<z
-lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) (x ∷ foy) foz x₁≈x₂ x₁<< x₂<< | tri< a ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) foy foz (IsEquivalence.refl
-                                                                                                                                      (IsStrictPartialOrder.isEquivalence
-                                                                                                                                       (isStrictPartialOrder isStrictTotalOrder))) (IsStrictPartialOrder.trans
+lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) Linked.[-] foz x₁≈x₂ x₁<< x₂<< | tri< y<z ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) Linked.[] foz (refl-≈) (Level.lift Agda.Builtin.Unit.tt) y<z
+lemma-intersect₀-head′ (y ∷ ys) (z ∷ zs) (x ∷ foy) foz x₁≈x₂ x₁<< x₂<< | tri< a ¬b ¬c = lemma-intersect₀-head′ ys (z ∷ zs) foy foz (refl-≈) (IsStrictPartialOrder.trans
                                                                                                                                                                                       (isStrictPartialOrder isStrictTotalOrder) x₁<< x) (IsStrictPartialOrder.trans
                                                                                                                                                                                                                                            (isStrictPartialOrder isStrictTotalOrder) x₁<< a)
 ... | tri≈ ¬a b ¬c = x₁<<
@@ -682,45 +672,21 @@ intersect⁺ : {xs′ ys′ : List Carrier} {x₀ : Carrier} → (xs : FreshOrde
   → x₀ ∈ xs → x₀ ∈ ys → x₀ ∈ intersect xs ys
 intersect⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) (here py)
   with compare isStrictTotalOrder x₁ y₁
-... | tri< a ¬b ¬c = contradiction (IsEquivalence.trans
-                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                      (IsEquivalence.sym
-                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                      py) ¬b
+... | tri< a ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
 ... | tri≈ ¬a b ¬c = here px
-... | tri> ¬a ¬b c = contradiction (IsEquivalence.trans
-                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                      (IsEquivalence.sym
-                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                      py) ¬b
+... | tri> ¬a ¬b c = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x∈xs x∈ys
   with compare isStrictTotalOrder x₁ y₁
-intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (IsEquivalence.trans
-                                                                                                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                      (IsEquivalence.sym
-                                                                                                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                      py) ¬b
+intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y≤x₀ = ∈-in-range x∈ys ys< in contradiction (<-trans y₁<y₂ (≤-resp-≈ y≤x₀ px)) ¬c
 ... | tri≈ ¬a x≈y ¬c = x∈xs
-intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (IsEquivalence.trans
-                                                                                                                      (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                      (IsEquivalence.sym
-                                                                                                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                      py) ¬b
+intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ Linked.[-] ys< (here px) x∈ys
 intersect⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) (here py)
   with compare isStrictTotalOrder x₁ y₁
-... | tri< x<y ¬b ¬c = contradiction (IsEquivalence.trans
-                                        (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                        (IsEquivalence.sym
-                                         (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                        py) ¬b
+... | tri< x<y ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
 ... | tri≈ ¬a x≈y ¬c = here px
-... | tri> ¬a ¬b y<x = contradiction (IsEquivalence.trans
-                                        (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                        (IsEquivalence.sym
-                                         (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                        py) ¬b
+... | tri> ¬a ¬b y<x = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x∈xs) (here py)
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = intersect⁺ xs< Linked.[-] x∈xs (here py)
@@ -728,22 +694,14 @@ intersect⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x
 ... | tri> ¬a ¬b y<x = let y≤x₀ = ∈-in-range x∈xs xs< in contradiction (<-trans x₁<x₂ (≤-resp-≈ y≤x₀ py)) ¬a
 intersect⁺ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈xs x∈ys
   with compare isStrictTotalOrder x₁ y₁
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (IsEquivalence.trans
-                                                                                                                               (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                               (IsEquivalence.sym
-                                                                                                                                (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                               py) ¬b
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y₂≤x₀ = ∈-in-range x∈ys ys< in contradiction (<-trans y₁<y₂ (≤-resp-≈ y₂≤x₀ px)) ¬c
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) x∈ys | tri< x<y ¬b ¬c = intersect⁺ xs< (y₁<y₂ ∷ ys<) x∈xs x∈ys
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri≈ ¬a x≈y ¬c = here px
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri≈ ¬a x≈y ¬c = contradiction (<-trans y₁<y₂ (≤-resp-≈ (∈-in-range x∈ys ys<) px)) ¬c
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here px) | tri≈ ¬a x≈y ¬c = contradiction (<-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) px)) ¬a
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (there x∈ys) | tri≈ ¬a x≈y ¬c = there (intersect⁺ xs< ys< x∈xs x∈ys)
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (IsEquivalence.trans
-                                                                                                                               (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                               (IsEquivalence.sym
-                                                                                                                                (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                               py) ¬b
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ (x₁<x₂ ∷ xs<) ys< (here px) x∈ys
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here py) | tri> ¬a ¬b y<x = contradiction (<-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) py)) ¬a
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ (x₁<x₂ ∷ xs<) ys< (there x∈xs) x∈ys
@@ -754,31 +712,19 @@ intersect⁻ : {xs′ ys′ : List Carrier} {x₀ : Carrier} → (xs : FreshOrde
   → x₀ ∈ intersect xs ys → x₀ ∈ xs × x₀ ∈ ys
 intersect⁻ {x₁ ∷ []}{y₁ ∷ []} Linked.[-] Linked.[-] x∈ixy
   with compare isStrictTotalOrder x₁ y₁
-intersect⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here px ,
-                                                                                    here
-                                                                                    (IsEquivalence.trans
-                                                                                     (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px x≈y)
+intersect⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here px , here (trans-≈ px x≈y)
 intersect⁻ {x₁ ∷ []}{y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x∈ixy
   with compare isStrictTotalOrder x₁ y₁
-intersect⁻ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here px ,
-                                                                                             here
-                                                                                             (IsEquivalence.trans
-                                                                                              (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px x≈y)
+intersect⁻ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here px , here (trans-≈ px x≈y)
 ... | tri> ¬a ¬b y<x =  Data.Product.map (λ z → z) there (intersect⁻ Linked.[-] ys< x∈ixy)
 intersect⁻ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈ixy
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = Data.Product.map there (λ z → z) (intersect⁻ xs< Linked.[-] x∈ixy)
-intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here px ,
-                                                                                             here
-                                                                                             (IsEquivalence.trans
-                                                                                              (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px x≈y)
+intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri≈ ¬a x≈y ¬c = here px , here (trans-≈ px x≈y)
 intersect⁻ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈ixy
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = Data.Product.map there (λ {x} z → z) (intersect⁻ xs< (y₁<y₂ ∷ ys<) x∈ixy )
-intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here px ,
-                                                                                                      here
-                                                                                                      (IsEquivalence.trans
-                                                                                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px x≈y)
+intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here px , here (trans-≈ px x≈y)
 intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈ixy) | tri≈ ¬a x≈y ¬c = Data.Product.map there there (intersect⁻ xs< ys< x∈ixy)
 ... | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) there (intersect⁻ (x₁<x₂ ∷ xs<) ys< x∈ixy)
 
@@ -859,42 +805,25 @@ difference⁻ : ∀ {xs ys x₀} → (xs< : FreshOrderedList xs) (ys< : FreshOrd
 difference⁻ Linked.[-] Linked.[] x∈dxy = x∈dxy , (λ ())
 difference⁻ {x₁ ∷ []}{y₁ ∷ []} Linked.[-] Linked.[-] x∈dxy
   with compare isStrictTotalOrder x₁ y₁
-difference⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri< x<y ¬b ¬c = (here px) , (λ x₀∈ys → let y₁≤x₁ = ≤-resp-≈ (∈-in-range x₀∈ys Linked.[-]) px in contradiction (IsEquivalence.sym (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) (≤⇒≈ y₁≤x₁ ¬c)) ¬b)
-difference⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri> ¬a ¬b y<x = (here px) , (λ{ (here py) → ¬b
-                                                                                                                 (IsEquivalence.trans
-                                                                                                                  (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                  (IsEquivalence.sym
-                                                                                                                   (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                  py)})
+difference⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri< x<y ¬b ¬c = (here px) , (λ x₀∈ys → let y₁≤x₁ = ≤-resp-≈ (∈-in-range x₀∈ys Linked.[-]) px in contradiction (sym-≈ (≤⇒≈ y₁≤x₁ ¬c)) ¬b)
+difference⁻ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) | tri> ¬a ¬b y<x = (here px) , (λ{ (here py) → ¬b (trans-≈ (sym-≈ px) py)})
 difference⁻ {x₁ ∷ []}{y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x∈dxy
   with compare isStrictTotalOrder x₁ y₁
-difference⁻ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri< x<y ¬b ¬c = (here px) , λ x₀∈ys → ¬b (IsEquivalence.sym (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) (≤⇒≈ (≤-resp-≈ (∈-in-range x₀∈ys (y₁<y₂ ∷ ys<)) px) ¬c))
-... | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) (λ{ {here px₀} x₀∉ys< (here px) → ¬b
-                                                                                      (IsEquivalence.trans
-                                                                                       (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                       (IsEquivalence.sym
-                                                                                        (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px₀)
-                                                                                       px) ; x₀∉ys< (there x₀∈y₁∷ys) → x₀∉ys< x₀∈y₁∷ys}) (difference⁻ Linked.[-] ys< x∈dxy)
+difference⁻ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) | tri< x<y ¬b ¬c = (here px) , λ x₀∈ys → ¬b (sym-≈ (≤⇒≈ (≤-resp-≈ (∈-in-range x₀∈ys (y₁<y₂ ∷ ys<)) px) ¬c))
+... | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) (λ{ {here px₀} x₀∉ys< (here px) → ¬b (trans-≈ (sym-≈ px₀) px) ; x₀∉ys< (there x₀∈y₁∷ys) → x₀∉ys< x₀∈y₁∷ys}) (difference⁻ Linked.[-] ys< x∈dxy)
 difference⁻ (x₁<x₂ ∷ xs<) Linked.[] x∈dxy = x∈dxy , (λ ())
 difference⁻ {x₁ ∷ xs}{y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy
   with compare isStrictTotalOrder x₁ y₁
-difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri< x<y ¬b ¬c = (here px) , (λ{ (here py) → ¬b
-                                                                                                                          (IsEquivalence.trans
-                                                                                                                           (isEquivalence (isStrictPartialOrder isStrictTotalOrder))
-                                                                                                                           (IsEquivalence.sym
-                                                                                                                            (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
-                                                                                                                           py)})
+difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri< x<y ¬b ¬c = (here px) , (λ{ (here py) → ¬b (trans-≈ (sym-≈ px) py)})
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x∈dxy) | tri< x<y ¬b ¬c = Data.Product.map there (λ x x₃ → x x₃) (difference⁻ xs< Linked.[-] x∈dxy)
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy | tri≈ ¬a x≈y ¬c = (there x∈dxy) , (λ{ (here py) → <⇒¬≈ (<-trans (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂ x≈y
-                                                                                                                                       x₁<x₂) (∈-in-range x∈dxy xs<)) (IsEquivalence.sym
-                                                                                                                            (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) py)})
+                                                                                                                                       x₁<x₂) (∈-in-range x∈dxy xs<)) (sym-≈ py)})
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy | tri> ¬a ¬b y<x = x∈dxy , (λ{ (here px) → ≤⇒¬< (∈-in-range x∈dxy (x₁<x₂ ∷ xs<)) (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂
-                                                                                                                                                       (IsEquivalence.sym
-                                                                                                                                                        (isEquivalence (isStrictPartialOrder isStrictTotalOrder)) px)
+                                                                                                                                                       (sym-≈ px)
                                                                                                                                                        y<x)})
 difference⁻ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈dxy
   with compare isStrictTotalOrder x₁ y₁
-difference⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri< x<y ¬b ¬c = (here px) , {!!}
-difference⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈dxy) | tri< x<y ¬b ¬c = Data.Product.map there (λ {x} z → z) (difference⁻ xs< (y₁<y₂ ∷ ys<) x∈dxy)
-... | tri≈ ¬a x≈y ¬c = Data.Product.map there {!!} (difference⁻ xs< ys< x∈dxy)
-... | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) {!!} (difference⁻ (x₁<x₂ ∷ xs<) ys< x∈dxy)
+difference⁻ {x₁ ∷ x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri< x<y ¬b ¬c = (here px) , λ x₀∈y1y2ys → contradiction (sym-≈ (≤⇒≈ (≤-resp-≈ (∈-in-range x₀∈y1y2ys (y₁<y₂ ∷ ys<)) px) ¬c)) ¬b
+difference⁻ {x₁ ∷ x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈dxy) | tri< x<y ¬b ¬c = Data.Product.map there (λ {x} z → z) (difference⁻ xs< (y₁<y₂ ∷ ys<) x∈dxy)
+difference⁻ {x₁ ∷ x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈dxy | tri≈ ¬a x≈y ¬c = Data.Product.map there (λ{ {x₀∈x2xs} x₀∉ys< (here px) → ≤⇒¬< (≤-resp-≈ (∈-in-range x₀∈x2xs xs<) (trans-≈ px (sym-≈ x≈y))) x₁<x₂ ; x₀∉ys< (there x₀∈y2ys) → x₀∉ys< x₀∈y2ys}) (difference⁻ xs< ys< x∈dxy)
+difference⁻ {x₁ ∷ x₂ ∷ xs} {y₁ ∷ y₂ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈dxy | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) (λ{ {x₀∈x1x1xs} x₀∉ys< (here px) → ¬b (≤⇒≈ (≤-resp-≈ (∈-in-range x₀∈x1x1xs (x₁<x₂ ∷ xs<) ) px) ¬a) ; x₀∉ys< (there x₀∈y2ys) → x₀∉ys< x₀∈y2ys}) (difference⁻ (x₁<x₂ ∷ xs<) ys< x∈dxy)
