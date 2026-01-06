@@ -776,8 +776,26 @@ difference⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] x₀∈xs x₀�
 ... | tri< x<y ¬b ¬c = x₀∈xs
 difference⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) x₀∉ys | tri≈ ¬a x≈y ¬c = contradiction (here (trans-≈ px x≈y)) x₀∉ys
 ... | tri> ¬a ¬b y<x = x₀∈xs
-difference⁺ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x₀∈xs x₀∉ys = {!!}
-difference⁺ (x ∷ xs<) ys< x₀∈xs x₀∉ys = {!!}
+difference⁺ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x₀∈xs x₀∉ys
+  with compare isStrictTotalOrder x₁ y₁
+difference⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) x₀∉ys | tri< x<y ¬b ¬c = here px
+difference⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) x₀∉ys | tri≈ ¬a x≈y ¬c = contradiction (here (trans-≈ px x≈y)) x₀∉ys
+... | tri> ¬a ¬b y<x = difference⁺ Linked.[-] ys< x₀∈xs (λ x₀∈ys< → x₀∉ys (there x₀∈ys<))
+difference⁺ (x₁<x₂ ∷ xs<) Linked.[] x₀∈xs x₀∉ys = x₀∈xs
+difference⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x₀∈xs x₀∉ys
+  with compare isStrictTotalOrder x₁ y₁
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) x₀∉ys | tri< x<y ¬b ¬c = here px
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x₀∈xs) x₀∉ys | tri< x<y ¬b ¬c = there (difference⁺ xs< Linked.[-] x₀∈xs x₀∉ys)
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) x₀∉ys | tri≈ ¬a x≈y ¬c = contradiction (here (trans-≈ px x≈y)) x₀∉ys
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x₀∈xs) x₀∉ys | tri≈ ¬a x≈y ¬c = x₀∈xs
+... | tri> ¬a ¬b y<x = x₀∈xs
+difference⁺ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x₀∈xs x₀∉ys
+  with compare isStrictTotalOrder x₁ y₁
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) x₀∉ys | tri< x<y ¬b ¬c = here px
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x₀∈xs) x₀∉ys | tri< x<y ¬b ¬c = there (difference⁺ xs< (y₁<y₂ ∷ ys<) x₀∈xs x₀∉ys)
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) x₀∉ys | tri≈ ¬a x≈y ¬c = contradiction (here (trans-≈ px x≈y)) x₀∉ys
+difference⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x₀∈xs) x₀∉ys | tri≈ ¬a x≈y ¬c = difference⁺ xs< ys< x₀∈xs (λ z → x₀∉ys (there z))
+... | tri> ¬a ¬b y<x = difference⁺ (x₁<x₂ ∷ xs<) ys< x₀∈xs (λ z → x₀∉ys (there z))
 
 
 difference⁻ : ∀ {xs ys x₀} → (xs< : FreshOrderedList xs) (ys< : FreshOrderedList ys)
