@@ -2,8 +2,8 @@ open import Level using (_⊔_)
 import Agda.Builtin.Unit
 open import Data.Unit.Polymorphic using (⊤; tt)
 open import Data.Empty
-open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; sym; trans; cong)
-open import Relation.Binary using (StrictTotalOrder; IsStrictTotalOrder; IsStrictPartialOrder; IsEquivalence; tri<; tri≈; tri>; Monotonic₁; Reflexive; Symmetric; Transitive)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; sym; cong; subst; sym-cong; subst-∘) renaming (trans to trans-≡)
+open import Relation.Binary using (Rel; StrictTotalOrder; IsStrictTotalOrder; IsStrictPartialOrder; IsEquivalence; tri<; tri≈; tri>; Monotonic₁; Reflexive; Symmetric; Transitive)
 open import Relation.Unary using (Pred)
 open import Data.Fin using (Fin; zero; suc)
 open import Data.Nat using (ℕ)
@@ -21,7 +21,7 @@ open import Data.Sum using (_⊎_; inj₁; inj₂; map)
 
 open import Function using (_∘_; id)
 
-module OrderedFreshList {ℓ₀}{ℓ₁}{ℓ₂}(so : StrictTotalOrder ℓ₀ ℓ₁ ℓ₂) where
+module OrderedFreshList {ℓ}(so : StrictTotalOrder ℓ ℓ ℓ) where
 
 open StrictTotalOrder so using (Carrier; _<_; _≈_; isStrictTotalOrder)
 
@@ -60,6 +60,20 @@ postulate
 postulate
   ≈-irrelevant : ∀ {x y} → (p q : x ≈ y) → p ≡ q
 
+
+
+-- type class for proposition equality
+record IsProp : Set (Level.suc ℓ) where 
+  field 
+    isProp :  _≈_ ≡ _≡_
+
+open IsProp ⦃...⦄
+
+≈-irrelevant′ :  ∀ ⦃ _ : IsProp ⦄ {x y} → (p q : x ≈ y) → p ≡ q
+≈-irrelevant′ ⦃ r ⦄ p q rewrite isProp ⦃ r ⦄
+  with p | q
+... | refl | refl = refl
+
 -- inspired by Data.List.Relation.Unary.Sorted.TotalOrder
 
 FreshOrderedList : Pred (List Carrier) _
@@ -79,9 +93,13 @@ module _ {x y xs} where
 _≤_ : Carrier → Carrier → Set _
 x ≤ y = x < y ⊎ x ≈ y
 
-<-trans : ∀ {x y z} → x < y → y ≤ z → x < z
-<-trans x<y (inj₁ y<z) = trans-< x<y y<z
-<-trans x<y (inj₂ y≈z) = <-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₁ y≈z x<y
+<≤-trans : ∀ {x y z} → x < y → y ≤ z → x < z
+<≤-trans x<y (inj₁ y<z) = trans-< x<y y<z
+<≤-trans x<y (inj₂ y≈z) = <-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₁ y≈z x<y
+
+≤<-trans : ∀ {x y z} → x ≤ y → y < z → x < z
+≤<-trans (inj₁ x<y) y<z = trans-< x<y y<z
+≤<-trans (inj₂ x≈y) y<z = <-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂ (sym-≈ x≈y) y<z
 
 ≤-resp-≈ : ∀ {x y z} → x ≤ y → y ≈ z → x ≤ z
 ≤-resp-≈ (inj₁ x<y) y≈z = inj₁
@@ -99,6 +117,13 @@ x ≤ y = x < y ⊎ x ≈ y
 ... | tri≈ ¬a b ¬c = ¬a x<y
 ... | tri> ¬a ¬b c = ¬a x<y
 
+<⇒¬> : ∀ {x y} → x < y → ¬ y < x
+<⇒¬> {x}{y} x<y y<x
+  with compare isStrictTotalOrder x y
+... | tri< a ¬b ¬c = ¬c y<x
+... | tri≈ ¬a b ¬c = ¬a x<y
+... | tri> ¬a ¬b c = ¬a x<y
+
 ≤⇒¬< : ∀ {x y} → x ≤ y → ¬ y < x
 ≤⇒¬< {x} {y} (inj₁ x<y) y<x
   with compare isStrictTotalOrder x y
@@ -113,7 +138,7 @@ x ≤ y = x < y ⊎ x ≈ y
 
 -- elements of a FOL
 
-_∈_  _∉_ : (x : Carrier) {xs : List Carrier} → FreshOrderedList xs → Set (ℓ₀ ⊔ ℓ₁)
+_∈_  _∉_ : (x : Carrier) {xs : List Carrier} → FreshOrderedList xs → Set ℓ
 _∈_ x {xs′} xs = x ∈′ xs′
 x ∉ xs = ¬ (x ∈ xs)
 
@@ -172,8 +197,8 @@ fresh-ordered-head x≈y (x ∷ fox) = <-resp-≈ (isStrictPartialOrder isStrict
                                      (sym-≈ x≈y)
                                      x ∷ fox
 
-∈-irrelevant : (x : Carrier) {xs′ : List Carrier} (xs : FreshOrderedList xs′) → (p q : x ∈ xs) → p ≡ q
-∈-irrelevant x {.(_ ∷ _)} xs (here px) (here py) = cong here (≈-irrelevant px py)
+∈-irrelevant : ⦃ _ : IsProp ⦄ (x : Carrier) {xs′ : List Carrier} (xs : FreshOrderedList xs′) → (p q : x ∈ xs) → p ≡ q
+∈-irrelevant x {.(_ ∷ _)} xs (here px) (here py) = cong here (≈-irrelevant′ px py)
 ∈-irrelevant x {(x₁ ∷ _)} xs (here px) (there q) = contradiction q (fresh-ordered⇒¬in x (fresh-ordered-head {x = x} px xs))
 ∈-irrelevant x {(x₁ ∷ _)} xs (there p) (here py) = contradiction p (fresh-ordered⇒¬in x (fresh-ordered-head py xs))
 ∈-irrelevant x {.(_ ∷ _ ∷ _)} (x₁ ∷ xs) (there p) (there q) = cong there (∈-irrelevant x xs p q)
@@ -188,10 +213,10 @@ fresh-ordered-head x≈y (x ∷ fox) = <-resp-≈ (isStrictPartialOrder isStrict
 
 -- -- subset and irrelevance
 
-_⊆_ : ∀ {xs}{ys} → FreshOrderedList xs → FreshOrderedList ys → Set (ℓ₀ ⊔ ℓ₁)
+_⊆_ : ∀ {xs}{ys} → FreshOrderedList xs → FreshOrderedList ys → Set ℓ
 xs ⊆ ys = ∀ x → x ∈ xs → x ∈ ys
 
-⊆-irrelevant : ∀ {xs′}{ys′}
+⊆-irrelevant : ∀ ⦃ _ : IsProp ⦄ {xs′}{ys′}
   → (xs : FreshOrderedList xs′) (ys : FreshOrderedList ys′)
   → (p q : xs ⊆ ys) → p ≡ q
 ⊆-irrelevant xs ys p q = ext p q (λ x → ext (p x) (q x) (λ x₁ → ∈-irrelevant x ys (p x x₁) (q x x₁)))
@@ -250,6 +275,7 @@ lemma-insert₀ {x}{y} y<x
 ... | tri≈ ¬a b ¬y<x = contradiction y<x ¬y<x
 ... | tri> ¬a ¬b y<x = refl
 
+
 insert : (x : Carrier) {xs′ : List Carrier} → FreshOrderedList xs′ → FreshOrderedList (insert₀ x xs′)
 insert x Linked.[] = Linked.[-]
 insert x { x₁ ∷ [] } Linked.[-]
@@ -283,6 +309,42 @@ insert-elem {x} {y ∷ ys′} (y₁<y₂ ∷ ys)
 ... | tri< x<y ¬b ¬c = here (refl-≈)
 ... | tri≈ ¬a x≈y ¬c = here x≈y
 ... | tri> ¬a ¬b y<x = there (insert-elem ys)
+
+lemma-insert₀-idem : ∀ {x xs} → (x∈ : x ∈′ xs) → (xs< : FreshOrderedList xs) → insert₀ x xs  ≡ xs
+lemma-insert₀-idem {x} {x₁ ∷ []} (here px) Linked.[-]
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction px ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction px ¬b
+lemma-insert₀-idem {x} {x₁ ∷ xs} (here px) (x₁<x₂ ∷ xs<)
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction px ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction px ¬b
+lemma-insert₀-idem {x} {x₁ ∷ xs} (there x∈) (x₁<x₂ ∷ xs<)
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction x₁<x₂ (<⇒¬> (≤<-trans (∈-in-range x∈ xs<) a))
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = cong (x₁ ∷_) (lemma-insert₀-idem x∈ xs<)
+
+
+insert-idem : ∀ {x} {ys′} → (ys : FreshOrderedList ys′) → (x∈ : x ∈ ys) → insert x ys ≡ subst (Linked _<_) (sym (lemma-insert₀-idem x∈ ys)) ys
+insert-idem {x}{x₁ ∷ []} Linked.[-] (here px)
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction px ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction px ¬b
+insert-idem {x} {x₁ ∷ xs} (x₁<x₂ ∷ xs<) (here px)
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction px ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction px ¬b
+insert-idem {x} {x₁ ∷ x₂ ∷ xs} (x₁<x₂ ∷ xs<) (there x∈)
+  with compare isStrictTotalOrder x x₁
+... | tri< a ¬b ¬c = contradiction x₁<x₂ (<⇒¬> (≤<-trans (∈-in-range x∈ xs<) a))
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = {!!}
+
 
 ----------------------------------------------------------------------
 -- delete
@@ -368,6 +430,36 @@ lemma-union₀-≈{x}{y} x≈y
 lemma-union₀-[] : ∀{xs} → union₀ xs [] ≡ xs
 lemma-union₀-[] {[]} = refl
 lemma-union₀-[] {x ∷ xs} = refl
+
+lemma-union₀-idem : ∀ {xs} → union₀ xs xs ≡ xs
+lemma-union₀-idem {[]} = refl
+lemma-union₀-idem {x ∷ xs}
+  with compare isStrictTotalOrder x x
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c = cong (x ∷_) lemma-union₀-idem
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+
+{-# TERMINATING #-}
+lemma-union₀-comm : ∀ ⦃ _ : IsProp ⦄ {xs}{ys} → union₀ xs ys ≡ union₀ ys xs
+lemma-union₀-comm {[]} {ys} = sym lemma-union₀-[]
+lemma-union₀-comm {x ∷ xs} {[]} = refl
+lemma-union₀-comm {x ∷ xs} {y ∷ ys}
+  with compare isStrictTotalOrder x y
+... | tri< x<y ¬b ¬c
+  with compare isStrictTotalOrder y x
+... | tri< a ¬b₁ ¬c₁ = contradiction a ¬c
+... | tri≈ ¬a b ¬c₁ = contradiction x<y ¬c₁
+... | tri> ¬a ¬b₁ c = cong (x ∷_) (lemma-union₀-comm {xs} {y ∷ ys})
+lemma-union₀-comm ⦃ r ⦄ {x ∷ xs} {y ∷ ys} | tri≈ ¬a x≈y ¬c
+  with compare isStrictTotalOrder y x
+... | tri< a ¬b ¬c₁ = contradiction a ¬c
+... | tri≈ ¬a₁ b ¬c₁ rewrite isProp ⦃ r ⦄ | b = cong (x ∷_) (lemma-union₀-comm {xs} {ys})
+... | tri> ¬a₁ ¬b c = contradiction c ¬a
+lemma-union₀-comm {x ∷ xs} {y ∷ ys} | tri> ¬a ¬b y<x
+  with compare isStrictTotalOrder y x
+... | tri< y<x ¬b₁ ¬c = cong (y ∷_) (lemma-union₀-comm {x ∷ xs} {ys})
+... | tri≈ ¬a₁ y≈x ¬c = contradiction y<x ¬a₁
+... | tri> ¬a₁ ¬b₁ x<y = contradiction x<y ¬a
 
 {-# TERMINATING #-}
 union : {xs′ ys′ : List Carrier} → FreshOrderedList xs′ → FreshOrderedList ys′ → FreshOrderedList (union₀ xs′ ys′)
@@ -549,6 +641,55 @@ union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁
 union⁺ʳ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈ys) | tri> ¬a ¬b y<x = there (union⁺ʳ (x₁<x₂ ∷ xs<) ys< x∈ys)
 
 
+-- algebraic properties of union
+
+-- right identity
+
+union-identityʳ : ∀ {xs} → (xs< : FreshOrderedList xs) → union xs< Linked.[] ≡ subst (Linked _<_) (sym lemma-union₀-[]) xs<
+union-identityʳ Linked.[] = refl
+union-identityʳ Linked.[-] = refl
+union-identityʳ (x ∷ xs<) = refl
+
+-- idempotence
+
+union-idempotent : ∀ {xs} → (xs< : FreshOrderedList xs) → union xs< xs< ≡ subst (Linked _<_) (sym lemma-union₀-idem) xs<
+union-idempotent Linked.[] = refl
+union-idempotent {x ∷ []} Linked.[-]
+  with compare isStrictTotalOrder x x
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+union-idempotent {x₁ ∷ x₂ ∷ xs} (x₁<x₂ ∷ xs<)
+  with compare isStrictTotalOrder x₁ x₁
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c rewrite union-idempotent xs<
+  with compare isStrictTotalOrder x₂ x₂
+... | tri< a₁ ¬b₁ ¬c₁ = contradiction refl-≈ ¬b₁
+... | tri> ¬a₁ ¬b₁ c₁ = contradiction refl-≈ ¬b₁
+... | tri≈ ¬a₁ b₁ ¬c₁ rewrite sym-cong {_}{List Carrier}{_}{List Carrier}{_}{_}{_∷_ x₁} (cong (_∷_ x₂) (lemma-union₀-idem {xs})) = {!subst-∘ {P = Linked _<_} {f = _∷_ x₁} (cong (_∷_ x₂) (lemma-union₀-idem {xs})) !}
+
+-- commutativity
+
+subst-swap : ∀ {ℓ₁ ℓ₂} {A : Set ℓ₁} {a b : A} (P : A → Set ℓ₂) {x : P b} {y : P a} (eq : a ≡ b) → x ≡ subst P eq y → subst P (sym eq) x ≡ y
+subst-swap P refl refl = refl
+
+union-commutative : ∀ ⦃ _ : IsProp ⦄ {xs} {ys} → (xs< : FreshOrderedList xs) (ys< : FreshOrderedList ys) → union xs< ys< ≡ subst (Linked _<_) (sym (lemma-union₀-comm {xs}{ys})) (union ys< xs<)
+union-commutative Linked.[] ys< = sym (subst-swap (Linked _<_) (sym lemma-union₀-[]) (union-identityʳ ys<))
+union-commutative {x₁ ∷ []} Linked.[-] Linked.[] = refl
+union-commutative {x₁ ∷ []}{y₁ ∷ []} Linked.[-] Linked.[-]
+  with compare isStrictTotalOrder x₁ y₁
+... | tri< x<y ¬b ¬c = {!!}
+... | tri≈ ¬a x≈y ¬c = {!!}
+... | tri> ¬a ¬b y<x = {!!}
+union-commutative {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) = {!!}
+union-commutative (x₁<x₂ ∷ xs<) Linked.[] = refl
+union-commutative (x₁<x₂ ∷ xs<) Linked.[-] = {!!}
+union-commutative (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) = {!!}
+
+
+-- associativity
+
 ----------------------------------------------------------------------
 -- intersection
 
@@ -562,6 +703,14 @@ intersect₀ (x ∷ xs) (y ∷ ys)
 ... | tri≈ ¬a b ¬c = x ∷ intersect₀ xs ys
 ... | tri> ¬a ¬b c = intersect₀ (x ∷ xs) ys
 
+lemma-intersect₀-idem : ∀ {xs} → intersect₀ xs xs ≡ xs
+lemma-intersect₀-idem {[]} = refl
+lemma-intersect₀-idem {x ∷ xs}
+  with compare isStrictTotalOrder x x
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c = cong (x ∷_) (lemma-intersect₀-idem {xs})
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+
 _<<_ : Carrier → List Carrier → Set _
 x << [] = ⊤
 x << (y ∷ ys) = x < y
@@ -572,21 +721,21 @@ extend-<< x<<xs Linked.[-] = x<<xs ∷ Linked.[-]
 extend-<< x<<xs (x ∷ fox) = x<<xs ∷ extend-<< x fox
 
 lemma-ordered-tail : ∀ {x y ys} → x < y → FreshOrderedList (y ∷ ys) → x << ys
-lemma-ordered-tail x<y Linked.[-] = Level.lift Agda.Builtin.Unit.tt
+lemma-ordered-tail x<y Linked.[-] = tt
 lemma-ordered-tail x<y (y₁<y₂ ∷ ys<) = trans-< x<y y₁<y₂
 
 {-# TERMINATING #-}
 lemma-intersect₀-head : ∀ {x} ys zs → FreshOrderedList ys → FreshOrderedList zs → x << ys → x << zs
   → x << intersect₀ ys zs
-lemma-intersect₀-head {x} [] [] foy foz x<<y x<<z = Level.lift Agda.Builtin.Unit.tt
-lemma-intersect₀-head {x} [] (z₁ ∷ zs) foy foz x<<y x<<z = Level.lift Agda.Builtin.Unit.tt
-lemma-intersect₀-head {x} (y₁ ∷ ys) [] foy foz x<<y x<<z = Level.lift Agda.Builtin.Unit.tt
+lemma-intersect₀-head {x} [] [] foy foz x<<y x<<z = tt
+lemma-intersect₀-head {x} [] (z₁ ∷ zs) foy foz x<<y x<<z = tt
+lemma-intersect₀-head {x} (y₁ ∷ ys) [] foy foz x<<y x<<z = tt
 lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) foy foz x<<y x<<z
   with compare isStrictTotalOrder y₁ z₁
-lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) Linked.[-] foz x<<y x<<z | tri< a ¬b ¬c =  lemma-intersect₀-head ys (z₁ ∷ zs) Linked.[] foz (Level.lift Agda.Builtin.Unit.tt) x<<z
+lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) Linked.[-] foz x<<y x<<z | tri< a ¬b ¬c =  lemma-intersect₀-head ys (z₁ ∷ zs) Linked.[] foz tt x<<z
 lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) (y₁< ∷ foy) foz x<<y x<<z | tri< a ¬b ¬c =  lemma-intersect₀-head ys (z₁ ∷ zs) foy foz (lemma-ordered-tail x<<y (y₁< ∷ foy)) x<<z
 ... | tri≈ ¬a b ¬c = x<<y
-lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) foy Linked.[-] x<<y x<<z | tri> ¬a ¬b c =  lemma-intersect₀-head (y₁ ∷ ys) zs foy Linked.[] x<<y (Level.lift Agda.Builtin.Unit.tt)
+lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) foy Linked.[-] x<<y x<<z | tri> ¬a ¬b c =  lemma-intersect₀-head (y₁ ∷ ys) zs foy Linked.[] x<<y tt
 lemma-intersect₀-head {x} (y₁ ∷ ys) (z₁ ∷ zs) foy (z₁< ∷ foz) x<<y x<<z | tri> ¬a ¬b c =  lemma-intersect₀-head (y₁ ∷ ys) zs foy foz x<<y (lemma-ordered-tail x<<z (z₁< ∷ foz))
 
 lemma-intersect₀-head′ : ∀ {x₁ x₂} ys zs → FreshOrderedList ys → FreshOrderedList zs
@@ -648,7 +797,7 @@ intersect⁺ {x₁ ∷ []} {y₁ ∷ []} Linked.[-] Linked.[-] (here px) (here p
 intersect⁺ {x₁ ∷ []} {y₁ ∷ ys} Linked.[-] (y₁<y₂ ∷ ys<) x∈xs x∈ys
   with compare isStrictTotalOrder x₁ y₁
 intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
-intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y≤x₀ = ∈-in-range x∈ys ys< in contradiction (<-trans y₁<y₂ (≤-resp-≈ y≤x₀ px)) ¬c
+intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y≤x₀ = ∈-in-range x∈ys ys< in contradiction (<≤-trans y₁<y₂ (≤-resp-≈ y≤x₀ px)) ¬c
 ... | tri≈ ¬a x≈y ¬c = x∈xs
 intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ []} {y₁ ∷ .(_ ∷ _)} Linked.[-] (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ Linked.[-] ys< (here px) x∈ys
@@ -660,20 +809,20 @@ intersect⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px
 intersect⁺ {x₁ ∷ xs} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x∈xs) (here py)
   with compare isStrictTotalOrder x₁ y₁
 ... | tri< x<y ¬b ¬c = intersect⁺ xs< Linked.[-] x∈xs (here py)
-... | tri≈ ¬a x≈y ¬c = let y≤x₀ = ∈-in-range x∈xs xs< in contradiction (<-trans x₁<x₂ (≤-resp-≈ y≤x₀ py)) ¬a
-... | tri> ¬a ¬b y<x = let y≤x₀ = ∈-in-range x∈xs xs< in contradiction (<-trans x₁<x₂ (≤-resp-≈ y≤x₀ py)) ¬a
+... | tri≈ ¬a x≈y ¬c = let y≤x₀ = ∈-in-range x∈xs xs< in contradiction (<≤-trans x₁<x₂ (≤-resp-≈ y≤x₀ py)) ¬a
+... | tri> ¬a ¬b y<x = let y≤x₀ = ∈-in-range x∈xs xs< in contradiction (<≤-trans x₁<x₂ (≤-resp-≈ y≤x₀ py)) ¬a
 intersect⁺ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) x∈xs x∈ys
   with compare isStrictTotalOrder x₁ y₁
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri< x<y ¬b ¬c = contradiction (trans-≈ (sym-≈ px) py) ¬b
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y₂≤x₀ = ∈-in-range x∈ys ys< in contradiction (<-trans y₁<y₂ (≤-resp-≈ y₂≤x₀ px)) ¬c
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri< x<y ¬b ¬c = let y₂≤x₀ = ∈-in-range x∈ys ys< in contradiction (<≤-trans y₁<y₂ (≤-resp-≈ y₂≤x₀ px)) ¬c
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) x∈ys | tri< x<y ¬b ¬c = intersect⁺ xs< (y₁<y₂ ∷ ys<) x∈xs x∈ys
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri≈ ¬a x≈y ¬c = here px
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri≈ ¬a x≈y ¬c = contradiction (<-trans y₁<y₂ (≤-resp-≈ (∈-in-range x∈ys ys<) px)) ¬c
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here px) | tri≈ ¬a x≈y ¬c = contradiction (<-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) px)) ¬a
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri≈ ¬a x≈y ¬c = contradiction (<≤-trans y₁<y₂ (≤-resp-≈ (∈-in-range x∈ys ys<) px)) ¬c
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here px) | tri≈ ¬a x≈y ¬c = contradiction (<≤-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) px)) ¬a
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (there x∈ys) | tri≈ ¬a x≈y ¬c = there (intersect⁺ xs< ys< x∈xs x∈ys)
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (here py) | tri> ¬a ¬b y<x = contradiction (trans-≈ (sym-≈ px) py) ¬b
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ (x₁<x₂ ∷ xs<) ys< (here px) x∈ys
-intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here py) | tri> ¬a ¬b y<x = contradiction (<-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) py)) ¬a
+intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (here py) | tri> ¬a ¬b y<x = contradiction (<≤-trans x₁<x₂ (≤-resp-≈ (∈-in-range x∈xs xs<) py)) ¬a
 intersect⁺ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈xs) (there x∈ys) | tri> ¬a ¬b y<x = intersect⁺ (x₁<x₂ ∷ xs<) ys< (there x∈xs) x∈ys
 
 
@@ -697,6 +846,25 @@ intersect⁻ {x₁ ∷ xs} {y₁ ∷ ys} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<)
 intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (here px) | tri≈ ¬a x≈y ¬c = here px , here (trans-≈ px x≈y)
 intersect⁻ {x₁ ∷ .(_ ∷ _)} {y₁ ∷ .(_ ∷ _)} (x₁<x₂ ∷ xs<) (y₁<y₂ ∷ ys<) (there x∈ixy) | tri≈ ¬a x≈y ¬c = Data.Product.map there there (intersect⁻ xs< ys< x∈ixy)
 ... | tri> ¬a ¬b y<x = Data.Product.map (λ z → z) there (intersect⁻ (x₁<x₂ ∷ xs<) ys< x∈ixy)
+
+----------------------------------------------------------------------
+-- algebraic properties of intersection
+
+-- idempotence
+
+intersect-idempotent : ∀ {xs} → (xs< : FreshOrderedList xs) → intersect xs< xs< ≡ subst (Linked _<_) (sym lemma-intersect₀-idem) xs<
+intersect-idempotent Linked.[] = refl
+intersect-idempotent {x ∷ xs} Linked.[-]
+  with compare isStrictTotalOrder x x
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c = refl
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+intersect-idempotent {x ∷ xs} (x₁<x₂ ∷ xs<)
+  with compare isStrictTotalOrder x x
+... | tri< a ¬b ¬c = contradiction refl-≈ ¬b
+... | tri≈ ¬a b ¬c = {!!}
+... | tri> ¬a ¬b c = contradiction refl-≈ ¬b
+
 
 ----------------------------------------------------------------------
 -- difference
@@ -814,7 +982,7 @@ difference⁻ {x₁ ∷ xs}{y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy
   with compare isStrictTotalOrder x₁ y₁
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (here px) | tri< x<y ¬b ¬c = (here px) , (λ{ (here py) → ¬b (trans-≈ (sym-≈ px) py)})
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] (there x∈dxy) | tri< x<y ¬b ¬c = Data.Product.map there (λ x x₃ → x x₃) (difference⁻ xs< Linked.[-] x∈dxy)
-difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy | tri≈ ¬a x≈y ¬c = (there x∈dxy) , (λ{ (here py) → <⇒¬≈ (<-trans (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂ x≈y
+difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy | tri≈ ¬a x≈y ¬c = (there x∈dxy) , (λ{ (here py) → <⇒¬≈ (<≤-trans (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂ x≈y
                                                                                                                                        x₁<x₂) (∈-in-range x∈dxy xs<)) (sym-≈ py)})
 difference⁻ {x₁ ∷ x₂ ∷ _} {y₁ ∷ []} (x₁<x₂ ∷ xs<) Linked.[-] x∈dxy | tri> ¬a ¬b y<x = x∈dxy , (λ{ (here px) → ≤⇒¬< (∈-in-range x∈dxy (x₁<x₂ ∷ xs<)) (<-resp-≈ (isStrictPartialOrder isStrictTotalOrder) .proj₂
                                                                                                                                                        (sym-≈ px)
