@@ -6,7 +6,7 @@ open import Data.Unit using (⊤; tt)
 open import Data.Fin using (Fin)
 open import Data.Nat using (ℕ; zero; suc; z≤n; s≤s) renaming (_⊔_ to _⊔ℕ_; _⊓_ to _⊓ℕ_; _≤_ to _≤ℕ_; _*_ to _*ℕ_; _+_ to _+ℕ_)
 open import Data.Nat.Properties using (+-identityʳ; *-zeroʳ; ≤-refl)
-open import Data.Product using (_×_; _,_; proj₁; proj₂; ∃-syntax)
+open import Data.Product using (Σ; _×_; _,_; proj₁; proj₂; ∃-syntax)
 open import Data.List using (List; []; _∷_; length; map; concat; _++_)
 open import Data.List.Relation.Unary.All using (All; []; _∷_)
 open import Data.List.Relation.Unary.Any  using (here; there)
@@ -16,189 +16,9 @@ open import Relation.Unary using (Pred; _∈_)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym)
 open import Function using (_∘_)
 
--- intervals on natural numbers
-
-record Mul : Set where
-  constructor ⟪_,_⟫
-  field
-    lo : ℕ
-    hi : Maybe ℕ
-
-_∈∈_ : ℕ → Mul → Set
-n ∈∈ ⟪ lo , just hi ⟫ = lo ≤ℕ n × n ≤ℕ hi
-n ∈∈ ⟪ lo , nothing ⟫ = lo ≤ℕ n
-
-_⊔M_ : Maybe ℕ → Maybe ℕ → Maybe ℕ
-just x ⊔M just x₁ = just (x ⊔ℕ x₁)
-just x ⊔M nothing = just x
-nothing ⊔M x₁ = x₁
-
-_≤M_ : Maybe ℕ → Maybe ℕ → Set
-x ≤M nothing = ⊤
-just x ≤M just x₁ = x ≤ℕ x₁
-nothing ≤M just x₁ = ⊥
-
-_*M_ : Maybe ℕ → Maybe ℕ → Maybe ℕ
-just x *M just x₁ = just (x *ℕ x₁)
-just zero *M nothing = just zero
-just (suc x) *M nothing = nothing
-nothing *M just zero = just zero
-nothing *M just (suc x) = nothing
-nothing *M nothing = nothing
-
-_+M_ : Maybe ℕ → Maybe ℕ → Maybe ℕ
-just x +M just x₁ = just (x +ℕ x₁)
-just x +M nothing = nothing
-nothing +M x₁ = nothing
-
-≤M-refl : ∀ {x} → x ≤M x
-≤M-refl {just x} = ≤-refl
-≤M-refl {nothing} = tt
-
-*M-zero-left : ∀ {x} → just 0 *M x ≡ just 0
-*M-zero-left {just x} = refl
-*M-zero-left {nothing} = refl
-
-*M-zero-right : ∀ {x} → x *M just 0 ≡ just 0
-*M-zero-right {just x} = cong just (*-zeroʳ x)
-*M-zero-right {nothing} = refl
-
-*M-identity-left : ∀ {x} → just 1 *M x ≡ x
-*M-identity-left {just x} = cong just (+-identityʳ x)
-*M-identity-left {nothing} = refl
-
-_⊔_ : Mul → Mul → Mul
-⟪ lo , hi ⟫ ⊔ ⟪ lo₁ , hi₁ ⟫ = ⟪ lo ⊓ℕ lo₁ , hi ⊔M hi₁ ⟫
-
-_≤_ : Mul → Mul → Set
-⟪ lo , hi ⟫ ≤ ⟪ lo₁ , hi₁ ⟫ = lo₁ ≤ℕ lo × (hi ≤M hi₁)
-
-_*_ : Mul → Mul → Mul
-⟪ lo , hi ⟫ * ⟪ lo₁ , hi₁ ⟫ = ⟪ lo *ℕ lo₁ , hi *M hi₁ ⟫
-
-_+_ : Mul → Mul → Mul
-⟪ lo , hi ⟫ + ⟪ lo₁ , hi₁ ⟫ = ⟪ lo +ℕ lo₁ , hi +M hi₁ ⟫
-
--- numeri
-
-data Num : Set where
-  `- `! `? `* `+ : Num
-
-𝓝⟦_⟧ : Num → Mul
-𝓝⟦ `- ⟧ = ⟪ 0 , just 0 ⟫
-𝓝⟦ `! ⟧ = ⟪ 1 , just 1 ⟫
-𝓝⟦ `? ⟧ = ⟪ 0 , just 1 ⟫
-𝓝⟦ `* ⟧ = ⟪ 0 , nothing ⟫
-𝓝⟦ `+ ⟧ = ⟪ 1 , nothing ⟫
-
-ADD : Num → Num → Num
-ADD `- y = y
-ADD `! `- = `!
-ADD `! `! = `+
-ADD `! `? = `+
-ADD `! `* = `+
-ADD `! `+ = `+
-ADD `? `- = `?
-ADD `? `! = `+
-ADD `? `? = `*
-ADD `? `* = `*
-ADD `? `+ = `+
-ADD `* `- = `*
-ADD `* `! = `+
-ADD `* `? = `*
-ADD `* `* = `*
-ADD `* `+ = `+
-ADD `+ `- = `+
-ADD `+ `! = `+
-ADD `+ `? = `+
-ADD `+ `* = `+
-ADD `+ `+ = `+
-
-ADD-sound : (η₁ η₂ : Num) → (𝓝⟦ η₁ ⟧ + 𝓝⟦ η₂ ⟧) ≤ 𝓝⟦ ADD η₁ η₂ ⟧
-ADD-sound `- `- = z≤n , z≤n
-ADD-sound `- `! = (s≤s z≤n) , (s≤s z≤n)
-ADD-sound `- `? = z≤n , (s≤s z≤n)
-ADD-sound `- `* = z≤n , tt
-ADD-sound `- `+ = s≤s z≤n , tt
-ADD-sound `! `- = s≤s z≤n , s≤s z≤n
-ADD-sound `! `! = s≤s z≤n , tt
-ADD-sound `! `? = s≤s z≤n , tt
-ADD-sound `! `* = s≤s z≤n , tt
-ADD-sound `! `+ = s≤s z≤n , tt
-ADD-sound `? `- = z≤n , s≤s z≤n
-ADD-sound `? `! = s≤s z≤n , tt
-ADD-sound `? `? = z≤n , tt
-ADD-sound `? `* = z≤n , tt
-ADD-sound `? `+ = s≤s z≤n , tt
-ADD-sound `* `- = z≤n , tt
-ADD-sound `* `! = s≤s z≤n , tt
-ADD-sound `* `? = z≤n , tt
-ADD-sound `* `* = z≤n , tt
-ADD-sound `* `+ = s≤s z≤n , tt
-ADD-sound `+ `- = s≤s z≤n , tt
-ADD-sound `+ `! = s≤s z≤n , tt
-ADD-sound `+ `? = s≤s z≤n , tt
-ADD-sound `+ `* = s≤s z≤n , tt
-ADD-sound `+ `+ = s≤s z≤n , tt
-
-data MUL : Num → Num → Num → Set where
-  m0-left : ∀ {η} → MUL `- η `-
-  m0-right : ∀ {η} → MUL η `- `-
-  m1-left : ∀ {η} → MUL `! η η
-  m1-right : ∀ {η} → MUL `! η η
-  m2-diag : MUL `? `? `?
-  m3-diag : MUL `+ `+ `+
-  m4-diag : MUL `* `* `*
-  m23     : MUL `? `+ `*
-  m32     : MUL `+ `? `*
-  m24     : MUL `? `* `*
-  m42     : MUL `* `? `*
-  m34     : MUL `+ `* `*
-  m43     : MUL `* `+ `*
-  
-MUL-sound : ∀ η₁ η₂ {η} → MUL η₁ η₂ η → (𝓝⟦ η₁ ⟧ * 𝓝⟦ η₂ ⟧) ≤ 𝓝⟦ η ⟧
-MUL-sound η₁ η₂ {η} m0-left rewrite *M-zero-left {𝓝⟦ η₂ ⟧ .Mul.hi} = z≤n , z≤n
-MUL-sound η₁ η₂ {η} m0-right rewrite *M-zero-right {𝓝⟦ η₁ ⟧ .Mul.hi} = z≤n , z≤n
-MUL-sound η₁ η₂ {η} m1-left rewrite +-identityʳ (𝓝⟦ η₂ ⟧ .Mul.lo) | *M-identity-left {𝓝⟦ η₂ ⟧ .Mul.hi} = ≤-refl , ≤M-refl
-MUL-sound η₁ η₂ {η} m1-right rewrite +-identityʳ (𝓝⟦ η₂ ⟧ .Mul.lo) | *M-identity-left {𝓝⟦ η₂ ⟧ .Mul.hi} = ≤-refl , ≤M-refl
-MUL-sound η₁ η₂ {η} m2-diag = z≤n , (s≤s z≤n)
-MUL-sound η₁ η₂ {η} m3-diag = (s≤s z≤n) , tt
-MUL-sound η₁ η₂ {η} m4-diag = z≤n , tt
-MUL-sound η₁ η₂ {η} m23 = z≤n , tt
-MUL-sound η₁ η₂ {η} m32 = z≤n , tt
-MUL-sound η₁ η₂ {η} m24 = z≤n , tt
-MUL-sound η₁ η₂ {η} m42 = z≤n , tt
-MUL-sound η₁ η₂ {η} m34 = z≤n , tt
-MUL-sound η₁ η₂ {η} m43 = z≤n , tt
-
--- types
-
-data Ty : Set
-
-record NTy : Set where
-  inductive
-  constructor ⟨_,_⟩
-  field
-    num : Num
-    ty  : Ty
-
-data Ty where
-  `⊥ : Ty
-  □ : Ty
-  _⇒_ : Ty → NTy → Ty
-  _⇛_ : NTy → NTy → Ty
-
--- subtyping
-
-data _<:ₙ_ : NTy → NTy → Set
-data _<:ₜ_ : Ty → Ty → Set where
-  <:ₜ-⊥ : ∀ {μ} → `⊥ <:ₜ μ
-  <:ₜ-□ : □ <:ₜ □
-  <:ₜ-⇒ : ∀ {μ₁ μ₂} {ημ₁ ημ₂} → μ₂ <:ₜ μ₁ → ημ₁ <:ₙ ημ₂ → (μ₁ ⇒ ημ₁) <:ₜ (μ₂ ⇒ ημ₂)
-  <:ₜ-⇛ : ∀ {ημ₁ ημ₂ ημ₁′ ημ₂′} → ημ₁ <:ₙ ημ₁′ → ημ₂′ <:ₙ ημ₂ → (ημ₁′ ⇛ ημ₂′) <:ₜ (ημ₁ ⇛ ημ₂)
-
-data _<:ₙ_ where
-  <:ₙ-comb : ∀ {μ₁ μ₂} {η₁ η₂} → 𝓝⟦ η₁ ⟧ ≤ 𝓝⟦ η₂ ⟧ → μ₁ <:ₜ μ₂ →  ⟨ η₁ , μ₁ ⟩ <:ₙ ⟨ η₂ , μ₂ ⟩
+open import Interval
+open import Numeri
+open import Types
 
 --- expressions
 
@@ -247,8 +67,15 @@ mapALL f (px ∷ allx) = lst (f px) ∷ mapALL f allx
 Sub : List Sort → List Sort → Set
 Sub S₁ S₂ = Si ∈′ S₁ → Expr S₂ Si
 
-postulate
-  sub  : ∀ {S₁ S₂} → Sub S₁ S₂ → Expr S₁ Si → Expr S₂ Si
+sub  : ∀ {S₁ S₂}{s} → Sub S₁ S₂ → Expr S₁ s → Expr S₂ s
+sub σ [] = []
+sub σ (e ∷ e*) = (sub σ e) ∷ (sub σ e*)
+sub σ (var x) = σ x
+sub σ (cst k) = cst k
+sub σ (abs μ e) = abs μ {!!}
+sub σ (mab ημ e) = mab ημ {!!}
+sub σ (app e e₁) = app (sub σ e) (sub σ e₁)
+sub σ (lst e) = lst (sub σ e)
 
 sub₁ : ∀ {S} → Expr S Si → Expr (Si ∷ S) Si → Expr S Si
 sub₁ {S} e₁ e₂ = sub σ e₂
@@ -259,7 +86,7 @@ sub₁ {S} e₁ e₂ = sub σ e₂
 
 -- small step operational semantics
 
-lengthE : ∀ {S} → Expr S Mu → ℕ
+lengthE : Expr [] Mu → ℕ
 lengthE [] = zero
 lengthE (e ∷ e*) = suc (lengthE e*)
 
@@ -342,8 +169,12 @@ lookup (there x) (_ ▻ Γ) = lookup x Γ
 -- semantic typing
 -- Γ ⊨ s : ημ <=> ∀ σ ∈ 𝓖⟦ Γ ⟧ . σ s ∈ 𝓔⟦ ημ ⟧
 
-_⊨_⦂_ : ∀ {S} → Ctx S → Expr S Mu → NTy → Set
-Γ ⊨ s ⦂ ημ = ∀ σ → σ ∈ 𝓖⟦ Γ ⟧ → {!sub σ (lst s)!} ∈ 𝓔⟦ ημ ⟧
+down : ∀ {S}{s} → Expr S s → Expr S Si
+down {S} {Si} e = e
+down {S} {Mu} e = lst e
+
+_⊨_⦂_ : ∀ {S}{s} → Ctx S → Expr S s → NTy → Set
+Γ ⊨ e ⦂ ημ = ∀ σ → σ ∈ 𝓖⟦ Γ ⟧ → sub σ (down e) ∷ [] ∈ 𝓔⟦ ημ ⟧
 
 -- syntactic typing
 
@@ -384,11 +215,58 @@ data _⊢_⦂_  {S} : ∀ {s} → Ctx S → Expr S s → NTy → Set where
   t-empty : ∀ {Γ : Ctx S}{μ}
     → Γ ⊢ [] ⦂ ⟨ `- , μ ⟩
 
-  t-head :  ∀ {Γ : Ctx S}{e}{s}{ηₑ ηₛ μ}
+  t-head :  ∀ {Γ : Ctx S}{e}{s}{ηₑ ηₛ η μ}
     → Γ ⊢ e ⦂ ⟨ ηₑ , μ ⟩
     → Γ ⊢ s ⦂ ⟨ ηₛ , μ ⟩
-    → Γ ⊢ (e ∷ s) ⦂ ⟨ ADD ηₑ ηₛ , μ ⟩
+    → η ≡ ADD ηₑ ηₛ
+    → Γ ⊢ (e ∷ s) ⦂ ⟨ η , μ ⟩
+
+-- Typing Preservation
+
+canonical-- : ∀ {s}{e : Expr [] s} → {μ : Ty} → ∅ ⊢ e ⦂ ⟨ `- , μ ⟩ → Value [] e → Σ (s ≡ Mu) λ {refl → e ≡ []}
+canonical-- t-empty [] = refl , refl
+canonical-- (t-head {ηₑ = ηₑ} {ηₛ} ⊢e ⊢e₁ eq) (v ∷ v*)
+  with ADD-zero ηₑ ηₛ eq
+canonical-- (t-head {ηₑ = ηₑ} {ηₛ} ⊢e ⊢e₁ eq) (cst ∷ v*) | refl , refl = {!⊢e!}
+canonical-- (t-head {ηₑ = ηₑ} {ηₛ} ⊢e ⊢e₁ eq) (abs ∷ v*) | refl , refl = {!!}
+canonical-- (t-head {ηₑ = ηₑ} {ηₛ} ⊢e ⊢e₁ eq) (mab ∷ v*) | refl , refl = {!!}
+canonical-- ⊢e cst = {!!}
+canonical-- ⊢e abs = {!!}
+canonical-- ⊢e mab = {!!}
+
+preserves-⊢ :  ∀{s} → {e* e*′ : Expr [] s} → {ημ : NTy}
+  → ∅ ⊢ e* ⦂ ημ
+  → e* ⟶ e*′
+  → ∅ ⊢ e*′ ⦂ ημ
+preserves-⊢ (t-app-s ⊢e* ⊢e*₁ m₁ m₂) (ξ-app₁ e*⟶) = t-app-s (preserves-⊢ ⊢e* e*⟶) ⊢e*₁ m₁ m₂
+preserves-⊢ (t-app-s ⊢e* ⊢e*₁ m₁ m₂) (ξ-app₂ val-e* e*⟶) = t-app-s ⊢e* (preserves-⊢ ⊢e*₁ e*⟶) m₁ m₂
+preserves-⊢ (t-app-s ⊢e* ⊢e*₁ m₁ m₂) (β₁ abs₁ val-e*₁) = {!!}
+preserves-⊢ (t-app-s ⊢e* ⊢e*₁ m₁ m₂) (βₙ mab₁ x) = {!!}
+preserves-⊢ (t-app-p ⊢e* ⊢e*₁ m) e*⟶ = {!!}
+preserves-⊢ (t-sub {ημ₁ = ημ₁} ⊢e* ημ₁<:ημ) e*⟶ = t-sub (preserves-⊢ ⊢e* e*⟶) ημ₁<:ημ
+preserves-⊢ (t-head ⊢e ⊢e* eq) (ξ-head e⟶) = t-head (preserves-⊢ ⊢e e⟶) ⊢e* eq
+preserves-⊢ (t-head (t-sub ⊢e x) ⊢e* eq) ξ-flat = {!!} -- need an inversion lemma here
+preserves-⊢ (t-head (t-lst ⊢e) ⊢e* eq) ξ-flat = {!!}   -- need a lemma about ++E and ADD
+preserves-⊢ (t-head ⊢e ⊢e* eq) (ξ-tail val-e e*⟶) = t-head ⊢e (preserves-⊢ ⊢e* e*⟶) eq
 
 -- Fundamental Theorem
-
 -- Γ ⊢ s : ημ ⇒ Γ ⊨ s : ημ
+
+fundamental-theorem : ∀ {S}{s} → (Γ : Ctx S) → (e* : Expr S s) → (ημ : NTy)
+  → Γ ⊢ e* ⦂ ημ
+  → Γ ⊨ e* ⦂ ημ
+fundamental-theorem Γ [] ημ t-empty σ σ⊨ = [] , (([] , z≤n , z≤n) , ⟶-step ξ-flat ⟶-refl)
+fundamental-theorem Γ (e ∷ e*) ⟨ η , μ ⟩ (t-head {ηₑ = ηₑ} {ηₛ} ⊢e ⊢e* eq) σ σ⊨
+  with fundamental-theorem Γ e ⟨ ηₑ , μ ⟩ ⊢e σ σ⊨
+... | ihe
+  with fundamental-theorem Γ e* ⟨ ηₛ , μ ⟩ ⊢e* σ σ⊨
+... | ihe*
+  = {!!}
+fundamental-theorem Γ (var x) ημ t-var σ σ⊨ = {!!}
+fundamental-theorem Γ (var x) ημ (t-sub ⊢e* ημ₁<:ημ) σ σ⊨ = {!!}
+fundamental-theorem Γ (cst x) ημ (t-sub ⊢e* ημ₁<:ημ) σ σ⊨ = {!!}
+fundamental-theorem Γ (abs x e*) ημ ⊢e* σ σ⊨ = {!!}
+fundamental-theorem Γ (mab x e*) ημ ⊢e* σ σ⊨ = {!!}
+fundamental-theorem Γ (app e* e*₁) ημ ⊢e* σ σ⊨ = {!!}
+fundamental-theorem Γ (lst e*) ημ (t-sub ⊢e* ημ₁<:ημ) σ σ⊨ = {!!}
+fundamental-theorem Γ (lst e*) ημ (t-lst ⊢e*) σ σ⊨ = {!!}
