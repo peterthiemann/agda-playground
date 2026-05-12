@@ -276,7 +276,6 @@ data _⊢_⦂_  {n} : Ctx n → Expr n → NTy → Set where
     → MUL η₁ η₂ η
     → Γ ⊢ app s₁ s₂  ⦂ ⟨ η , μ₂ ⟩
 
-
   t-sub : ∀ {Γ : Ctx n}{e : Expr n}{ημ₁ ημ₂}
     → Γ ⊢ e ⦂ ημ₁
     → ημ₁ <:ₙ ημ₂
@@ -1077,3 +1076,95 @@ preserve (t-head {η₁ = η₁₂} {η₂ = η₃} ⊢e₁₂ ⊢e₃ refl) mon
 
   η<: : ADD η₁ (ADD η₂ η₃) <:₀ ADD η₁₂ η₃
   η<: = <:₀-trans η-assoc η-step
+
+-- progress
+
+all-single-absvalue : ∀ {μ}{ημ}{s} → (v   : Value s) (x   : AllSingleton (μ ⇒ ημ) s) → ALL AbsValue s
+all-single-absvalue vε Aε = Aε
+all-single-absvalue (v v· v₁) (x A· x₁) = (all-single-absvalue v x) A· (all-single-absvalue v₁ x₁)
+all-single-absvalue cst (AP (sv-cst ()))
+all-single-absvalue abs (AP (sv-abs (<:ₜ-⇒ x x₁))) = AP (v-abs _ _)
+all-single-absvalue mab (AP (sv-mab ()))
+
+all-single-mabvalue : ∀ {ημ}{ημ₁}{s} → (v   : Value s) (x   : AllSingleton (ημ ⇛ ημ₁) s) → ALL MabValue s
+all-single-mabvalue vε Aε = Aε
+all-single-mabvalue (v v· v₁) (x A· x₁) = (all-single-mabvalue v x) A· (all-single-mabvalue v₁ x₁)
+all-single-mabvalue cst (AP (sv-cst ()))
+all-single-mabvalue abs (AP (sv-abs ()))
+all-single-mabvalue mab (AP (sv-mab x)) = AP (v-mab _ _)
+
+
+data Progress (e : Expr zero) : Set where
+
+  step : ∀ {e′} → e ⟶ e′ → Progress e
+  done : Value e → Progress e
+
+progress : ∀ {e}{ημ} → ∅ ⊢ e ⦂ ημ → Progress e
+progress t-cst = done cst
+progress (t-abs ⊢e) = done abs
+progress (t-mab ⊢e) = done mab
+progress (t-app-s ⊢e ⊢e₁ m m₁)
+  with progress ⊢e
+... | step e⟶ = step (ξ-app₁ e⟶)
+... | done v
+  with progress ⊢e₁
+... | step e⟶ = step (ξ-app₂ v e⟶)
+... | done w
+  with canonical-sequence ⊢e v
+... | seq-zero = step (β₁ v Aε w)
+... | seq-one (sv-abs x) = step (β₁ v (AP (v-abs _ _)) w)
+... | seq-opt-zero = step (β₁ v Aε w)
+... | seq-opt-one (sv-abs x) = step (β₁ v (AP (v-abs _ _)) w)
+... | seq-star x = step (β₁ v (all-single-absvalue v x) w)
+... | seq-plus x x₁ = step (β₁ v (all-single-absvalue v x) w)
+progress (t-app-p ⊢e ⊢e₁ m)
+  with progress ⊢e
+... | step e⟶ = step (ξ-app₁ e⟶)
+... | done v
+  with progress ⊢e₁
+... | step e⟶ = step (ξ-app₂ v e⟶)
+... | done w
+  with canonical-sequence ⊢e v
+... | seq-zero = step (β₁ v Aε w)
+... | seq-one (sv-mab x) = step (βₙ v (AP (v-mab _ _)) w)
+... | seq-opt-zero = step (β₁ v Aε w)
+... | seq-opt-one (sv-mab x) = step (βₙ v (AP (v-mab _ _)) w)
+... | seq-star all = step (βₙ v (all-single-mabvalue v all) w)
+... | seq-plus all x₁ = step (βₙ v (all-single-mabvalue v all) w)
+progress (t-sub ⊢e x) = progress ⊢e
+progress t-empty = done vε
+progress (t-head ⊢e ⊢e₁ add-eq)
+  with progress ⊢e
+... | step e⟶ = step (ξ-head e⟶)
+... | done v
+  with progress ⊢e₁
+... | step e⟶ = step (ξ-tail v e⟶)
+progress (t-head ⊢e ⊢e₁ add-eq) | done vε | done w = step mon-ε-unit-left
+progress (t-head ⊢e ⊢e₁ add-eq) | done (v v· v₁) | done w = step mon-·-assoc
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done vε = step mon-ε-unit-right
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done ww@(w v· w₁) = done ((cst v· ww) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done cst = done ((cst v· cst) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done abs
+  with t-cst-inversion ⊢e | t-abs-inversion ⊢e₁
+... | <:ₙ-comb _ <:ₜ-□ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done mab
+  with t-cst-inversion ⊢e | t-mab-inversion ⊢e₁
+... | <:ₙ-comb _ <:ₜ-□ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done vε = step mon-ε-unit-right
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done ww@(w v· w₁) = done ((abs v· ww) {λ ()}{λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done cst
+  with t-abs-inversion ⊢e | t-cst-inversion ⊢e₁
+... | _ , <:ₙ-comb _ () , _ | <:ₙ-comb _ <:ₜ-□
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done abs = done ((abs v· abs) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done mab
+  with t-abs-inversion ⊢e | t-mab-inversion ⊢e₁
+... | _ , <:ₙ-comb _ (<:ₜ-⇒ _ _) , _ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done vε = step mon-ε-unit-right
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done ww@(w v· w₁) = done ((mab v· ww) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done cst
+  with t-mab-inversion ⊢e | t-cst-inversion ⊢e₁
+... | _ , <:ₙ-comb _ () , _ | <:ₙ-comb _ <:ₜ-□
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done abs
+  with t-mab-inversion ⊢e | t-abs-inversion ⊢e₁
+... | _ , <:ₙ-comb _ (<:ₜ-⇛ _ _) , _ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
