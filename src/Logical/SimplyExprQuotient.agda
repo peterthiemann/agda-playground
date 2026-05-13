@@ -231,6 +231,8 @@ data Ctx : ℕ → Set where
   ∅ : Ctx zero
   _▻_ : NTy → Ctx n → Ctx (suc n)
 
+variable Γ : Ctx n
+
 lookup : Fin n → Ctx n → NTy
 lookup Fin.zero (ημ ▻ _) = ημ
 lookup (Fin.suc x) (_ ▻ Γ) = lookup x Γ
@@ -241,9 +243,7 @@ lookup (Fin.suc x) (_ ▻ Γ) = lookup x Γ
 𝓖⟦ ∅ ⟧ σ = ⊤
 𝓖⟦ ημ ▻ Γ ⟧ σ = (∃[ w ] σ Fin.zero ≡ w × w ∈ 𝓦⟦ ημ ⟧) × (σ ∘ Fin.suc) ∈ 𝓖⟦ Γ ⟧
 
-
 -- semantic typing
--- Γ ⊨ s : ημ <=> ∀ σ ∈ 𝓖⟦ Γ ⟧ . σ s ∈ 𝓔⟦ ημ ⟧
 
 _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 Γ ⊨ e ⦂ ημ = ∀ σ → σ ∈ 𝓖⟦ Γ ⟧ → sub σ e ∈ 𝓔⟦ ημ ⟧
@@ -252,39 +252,39 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 
 data _⊢_⦂_  {n} : Ctx n → Expr n → NTy → Set where
 
-  t-var : ∀ {Γ : Ctx n}{x} → Γ ⊢ var x ⦂ lookup x Γ
+  t-var : ∀ {x} → Γ ⊢ var x ⦂ lookup x Γ
 
-  t-cst : ∀ {Γ : Ctx n}{k} → Γ ⊢ cst k ⦂ ⟨ `! , □ ⟩
+  t-cst : ∀ {k} → Γ ⊢ cst k ⦂ ⟨ `! , □ ⟩
 
-  t-abs : ∀ {Γ : Ctx n}{μ}{s}{ημ}
+  t-abs : ∀ {μ}{s}{ημ}
     → (⟨ `! , μ ⟩ ▻ Γ) ⊢ s ⦂ ημ
     → Γ ⊢ abs μ s  ⦂ ⟨ `! , (μ ⇒ ημ) ⟩
 
-  t-mab : ∀ {Γ : Ctx n}{ημ}{s}{ημ′}
+  t-mab : ∀ {ημ}{s}{ημ′}
     → (ημ ▻ Γ) ⊢ s ⦂ ημ′
     → Γ ⊢ mab ημ s  ⦂ ⟨ `! , (ημ ⇛ ημ′) ⟩
 
-  t-app-s : ∀ {Γ : Ctx n}{s₁}{s₂}{η₁ μ₁ η₂ μ₂ η₃ η η′}
+  t-app-s : ∀ {s₁}{s₂}{η₁ μ₁ η₂ μ₂ η₃ η η′}
     → Γ ⊢ s₁ ⦂ ⟨ η₁ , μ₁ ⇒ ⟨ η₂ , μ₂ ⟩ ⟩
     → Γ ⊢ s₂ ⦂ ⟨ η₃ , μ₁ ⟩
     → MUL η₁ η₂ η′ → MUL η′ η₃ η
     → Γ ⊢ app s₁ s₂  ⦂ ⟨ η , μ₂ ⟩
 
-  t-app-p : ∀ {Γ : Ctx n}{s₁}{s₂}{η₁ ημ η₂ μ₂ η}
+  t-app-p : ∀ {s₁}{s₂}{η₁ ημ η₂ μ₂ η}
     → Γ ⊢ s₁ ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
     → Γ ⊢ s₂ ⦂ ημ
     → MUL η₁ η₂ η
     → Γ ⊢ app s₁ s₂  ⦂ ⟨ η , μ₂ ⟩
 
-  t-sub : ∀ {Γ : Ctx n}{e : Expr n}{ημ₁ ημ₂}
+  t-sub : ∀ {e : Expr n}{ημ₁ ημ₂}
     → Γ ⊢ e ⦂ ημ₁
     → ημ₁ <:ₙ ημ₂
     → Γ ⊢ e  ⦂ ημ₂
 
-  t-empty : ∀ {Γ : Ctx n}{μ}
+  t-empty : ∀ {μ}
     → Γ ⊢ ε ⦂ ⟨ `- , μ ⟩
 
-  t-head : ∀ {Γ : Ctx n}{e₁}{e₂}{η₁ η₂ η μ}
+  t-head : ∀ {e₁}{e₂}{η₁ η₂ η μ}
     → Γ ⊢ e₁ ⦂ ⟨ η₁ , μ ⟩
     → Γ ⊢ e₂ ⦂ ⟨ η₂ , μ ⟩
     → η ≡ ADD η₁ η₂
