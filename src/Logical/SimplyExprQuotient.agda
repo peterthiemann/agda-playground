@@ -1104,7 +1104,7 @@ irred e = ∀ e′ → ¬ (e ⟶ e′)
 
 monoidal-nf : Expr zero → Set
 monoidal-nf ε = ⊤
-monoidal-nf (e · e₁) = e ≢ ε × e₁ ≢ ε × ∀ {x y} → e ≢ (x · y) × monoidal-nf e₁
+monoidal-nf (e · e₁) = e ≢ ε × e₁ ≢ ε × (∀ {x y} → e ≢ (x · y)) × monoidal-nf e₁
 monoidal-nf (cst x) = ⊤
 monoidal-nf (abs x e) = ⊤
 monoidal-nf (mab x e) = ⊤
@@ -1159,12 +1159,29 @@ value-𝓥 {μ = □} (_ , refl) = cst
 value-𝓥 {μ = μ ⇒ ημ} (_ , _ , refl , _) = abs
 value-𝓥 {μ = x ⇛ x₁} (_ , _ , refl , _) = mab
 
+¬𝓥-app : ∀ {w₁ w₂} {μ} → ¬ 𝓥⟦ μ ⟧ (app w₁ w₂)
+¬𝓥-app {μ = `⊥} ()
+¬𝓥-app {μ = □} ()
+¬𝓥-app {μ = μ ⇒ x} ()
+¬𝓥-app {μ = x ⇛ x₁} ()
+
 ALL-proj₁ : {P : Pred (Expr zero) lzero}{e₁ e₂ : Expr zero} → ALL P (e₁ · e₂) → ALL P e₁
 ALL-proj₁ (all A· all₁) = all
 ALL-proj₁ (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
 ALL-proj₂ : {P : Pred (Expr zero) lzero}{e₁ e₂ : Expr zero} → ALL P (e₁ · e₂) → ALL P e₂
 ALL-proj₂ (all A· all₁) = all₁
 ALL-proj₂ (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+
+all-monoidal-value : ∀ {η} {μ : Ty} {w : Expr 0}
+  → ALL 𝓥⟦ μ ⟧ w → monoidal-nf w → lengthE w ∈∈ 𝓝⟦ η ⟧ → 𝓦⟦ ⟨ η , μ ⟩ ⟧ w
+all-monoidal-value Aε mono-w len-w = Aε , tt , len-w
+all-monoidal-value ap@(all-w A· all-w₁) mono-w len-w = ap , mono-w , len-w
+all-monoidal-value {w = ε} (AP {e≢ε = e≢ε} x) mono-w len-w = ⊥-elim (e≢ε refl)
+all-monoidal-value {w = w · w₁} (AP {e≢· = e≢·} x) mono-w len-w = ⊥-elim (e≢· refl)
+all-monoidal-value {w = cst k} ap@(AP x) mono-w len-w = ap , tt , len-w
+all-monoidal-value {w = abs x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
+all-monoidal-value {w = mab x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
+all-monoidal-value {w = app w w₁} (AP x) mono-w len-w = ⊥-elim (¬𝓥-app x)
 
 -- irred-monoidal : ∀ {e}{μ} → irred e → ALL 𝓥⟦ μ ⟧ e → monoidal-nf e
 -- irred-monoidal {ε} irr all-v = tt
@@ -1189,7 +1206,7 @@ ALL-proj₂ (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
 value-monoidal-nf : ∀ {e} → Value e → monoidal-nf e
 value-monoidal-nf vε = tt
 value-monoidal-nf ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·})
-  = v≢ε , w≢ε , (λ {x} {y} → v≢· , value-monoidal-nf vw)
+  = v≢ε , w≢ε , (λ {x} {y} → v≢·)  , value-monoidal-nf vw
 value-monoidal-nf cst = tt
 value-monoidal-nf abs = tt
 value-monoidal-nf mab = tt
@@ -1215,13 +1232,8 @@ value-𝓦 {ημ = ⟨ η , μ ⟩} (all∈𝓥 , nf , len∈) = value-all-nf al
       → Value e
     value-all-nf Aε nf = vε
     value-all-nf (AP e∈𝓥) nf = value-𝓥 e∈𝓥
-    value-all-nf {e = e₁ · e₂} (all₁ A· all₂) (e₁≢ε , e₂≢ε , tail)
-      = let
-          e₁≢· : ∀ {x y} → e₁ ≢ (x · y)
-          e₁≢· {x} {y} = proj₁ (tail {x = x} {y = y})
-          nf₂  = proj₂ (tail {x = ε} {y = ε})
-        in
-          ((atomic-from-all all₁ e₁≢ε e₁≢·) v· (value-all-nf all₂ nf₂))
+    value-all-nf {e = e₁ · e₂} (all₁ A· all₂) (e₁≢ε , e₂≢ε , e₁≢· , nf₂)
+      =   ((atomic-from-all all₁ e₁≢ε e₁≢·) v· (value-all-nf all₂ nf₂))
             {v≢ε = e₁≢ε}
             {w≢ε = e₂≢ε}
             {v≢· = e₁≢·}
