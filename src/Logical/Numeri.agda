@@ -585,3 +585,13 @@ MUL-sound η₁ η₂ {η} m24 = z≤n , tt
 MUL-sound η₁ η₂ {η} m42 = z≤n , tt
 MUL-sound η₁ η₂ {η} m34 = z≤n , tt
 MUL-sound η₁ η₂ {η} m43 = z≤n , tt
+
+<:₀-subset : ∀ {η η′} {k} → η <:₀ η′ → k ∈∈ 𝓝⟦ η ⟧ → k ∈∈ 𝓝⟦ η′ ⟧
+<:₀-subset <:₀-refl k∈ = k∈
+<:₀-subset <:₀--? (0≤k , z≤n) = 0≤k , z≤n
+<:₀-subset <:₀--* (0≤k , k≤0) = 0≤k
+<:₀-subset <:₀-!? (1≤k , k≤1) = z≤n , k≤1
+<:₀-subset <:₀-!* (1≤k , k≤1) = z≤n
+<:₀-subset <:₀-!+ (1≤k , k≤1) = 1≤k
+<:₀-subset <:₀-?* (0≤k , k≤1) = 0≤k
+<:₀-subset <:₀-+* k∈ = z≤n
