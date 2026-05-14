@@ -3,14 +3,14 @@ module SimplyExprQuotient where
 open import Level using (Level) renaming (zero to lzero)
 
 open import Data.Empty using (⊥; ⊥-elim)
-open import Data.Nat using (ℕ; zero; suc) renaming (_+_ to _+ℕ_)
+open import Data.Nat using (ℕ; zero; suc; s≤s; z≤n) renaming (_+_ to _+ℕ_; _≤_ to _≤ℕ_)
 open import Data.Fin using (Fin)
-open import Data.Product using (∃-syntax; _×_; _,_; proj₁; proj₂)
+open import Data.Product using (Σ ; ∃-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
 
 open import Function using (_∘_)
-open import Relation.Unary using (Pred; _∈_)
+open import Relation.Unary using (Pred; _∈_;_⊆_)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym; subst)
 
 open import Interval
@@ -129,6 +129,11 @@ data ALL (P : Expr zero → Set) : Expr zero → Set where
   _A·_ : ∀ {e₁}{e₂} → ALL P e₁ → ALL P e₂ → ALL P (e₁ · e₂)
   AP : ∀ {e} → P e → ALL P e
 
+mapALL : ∀ {e : Expr zero} {P Q : Pred (Expr zero) lzero} → (∀ {x} → P x → Q x) → ALL P e → ALL Q e
+mapALL P⇒Q Aε = Aε
+mapALL P⇒Q (ap A· ap₁) = (mapALL P⇒Q ap) A· (mapALL P⇒Q ap₁)
+mapALL P⇒Q (AP x) = AP (P⇒Q x)
+
 AllSingleton : Ty → Expr zero → Set
 AllSingleton μ e = ALL (SingletonValue μ) e
 
@@ -155,10 +160,10 @@ absbody (v-abs μ s) = s
 mabbody : ∀{e : Expr zero} → MabValue e → Expr (suc zero)
 mabbody (v-mab ημ s) = s
 
-mapALL : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → P x → Expr n) → ALL P e → Expr n
-mapALL f Aε = ε
-mapALL f (a A· a₁) = (mapALL f a) · (mapALL f a₁)
-mapALL f (AP Pe) = f Pe
+foldALL : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → P x → Expr n) → ALL P e → Expr n
+foldALL f Aε = ε
+foldALL f (a A· a₁) = (foldALL f a) · (foldALL f a₁)
+foldALL f (AP Pe) = f Pe
 
 -- reduction
 
@@ -195,35 +200,18 @@ data _⟶_ : Expr zero → Expr zero → Set where
     → Value s
     → (abs₁ : ALL AbsValue s)
     → Value w
-    → app s w ⟶ mapE (λ v → mapE (λ b → sub₁ v b) (mapALL absbody abs₁)) w
+    → app s w ⟶ mapE (λ v → mapE (λ b → sub₁ v b) (foldALL absbody abs₁)) w
 
   βₙ : ∀ {s}{w}
     → Value s
     → (mab₁ : ALL MabValue s)
     → Value w
-    → app s w ⟶ mapE (λ b → sub₁ w b) (mapALL mabbody mab₁)
+    → app s w ⟶ mapE (λ b → sub₁ w b) (foldALL mabbody mab₁)
 
 
 data _⟶*_ : Expr zero → Expr zero → Set where
   ⟶-refl : ∀ {e*} → e* ⟶* e*
   ⟶-step : ∀ {e₁* e₂* e₃*} → e₁* ⟶ e₂* → e₂* ⟶* e₃* → e₁* ⟶* e₃*
-
-
--- logical relation
-
-𝓥⟦_⟧ : Ty → Pred (Expr zero) lzero
-𝓦⟦_⟧ : NTy → Pred (Expr zero) lzero
-𝓔⟦_⟧ : NTy → Pred (Expr zero) lzero
-
-𝓥⟦ `⊥ ⟧ e = ⊥
-𝓥⟦ □ ⟧ e = ∃[ n ] e ≡ cst n
-𝓥⟦ μ ⇒ ημ ⟧ e = ∃[ μ₀ ]  ∃[ s ] e ≡ abs μ₀ s    × μ <:ₜ μ₀ × ∀ v → v ∈ 𝓥⟦ μ ⟧   → mapE (sub₁ v) s ∈ 𝓔⟦ ημ ⟧
-
-𝓥⟦ ημ₁ ⇛ ημ₂ ⟧ e = ∃[ ημ₀ ] ∃[ s ] e ≡ mab ημ₀ s   × ημ₁ <:ₙ ημ₀ ×  ∀ w → w ∈ 𝓦⟦ ημ₁ ⟧ → mapE (sub₁ w) s ∈ 𝓔⟦ ημ₂ ⟧
-
-𝓦⟦ ⟨ η , μ ⟩ ⟧ s  = ALL 𝓥⟦ μ ⟧ s × (lengthE s ∈∈ 𝓝⟦ η ⟧)
-
-𝓔⟦ ημ ⟧ s          = ∃[ w ] w ∈ 𝓦⟦ ημ ⟧ × (s ⟶* w) 
 
 -- typing contexts
 
@@ -236,17 +224,6 @@ variable Γ : Ctx n
 lookup : Fin n → Ctx n → NTy
 lookup Fin.zero (ημ ▻ _) = ημ
 lookup (Fin.suc x) (_ ▻ Γ) = lookup x Γ
-
--- 𝓖⟦ Γ ⟧ characterizes substitutions σ: if x : ημ ∈ Γ then σ(x) ∈ 𝓦⟦ ημ ⟧
-
-𝓖⟦_⟧ : Ctx n → Sub n zero → Set
-𝓖⟦ ∅ ⟧ σ = ⊤
-𝓖⟦ ημ ▻ Γ ⟧ σ = (∃[ w ] σ Fin.zero ≡ w × w ∈ 𝓦⟦ ημ ⟧) × (σ ∘ Fin.suc) ∈ 𝓖⟦ Γ ⟧
-
--- semantic typing
-
-_⊨_⦂_ : Ctx n → Expr n → NTy → Set
-Γ ⊨ e ⦂ ημ = ∀ σ → σ ∈ 𝓖⟦ Γ ⟧ → sub σ e ∈ 𝓔⟦ ημ ⟧
 
 -- syntactic typing
 
@@ -681,7 +658,7 @@ mixed-abs-num-empty (AP (v-abs μ e*)) ⊢s
 mixed-mab-minus : ∀ {s w η₁ μ₁ η₂ μ₂}
   → (mab₁ : ALL MabValue s)
   → ∅ ⊢ s ⦂ ⟨ η₁ , μ₁ ⇒ ⟨ η₂ , μ₂ ⟩ ⟩
-  → ∅ ⊢ mapE (λ b → sub₁ w b) (mapALL mabbody mab₁) ⦂ ⟨ `- , μ₂ ⟩
+  → ∅ ⊢ mapE (λ b → sub₁ w b) (foldALL mabbody mab₁) ⦂ ⟨ `- , μ₂ ⟩
 mixed-mab-minus Aε ⊢s = t-empty
 mixed-mab-minus (mab₁ A· mab₂) ⊢s
   with t-head-inversion ⊢s
@@ -697,7 +674,7 @@ mixed-mab-minus (AP (v-mab ημ e*)) ⊢s
 mixed-abs-minus : ∀ {s v η₁ ημ η₂ μ₂}
   → (abs₁ : ALL AbsValue s)
   → ∅ ⊢ s ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
-  → ∅ ⊢ mapE (λ b → sub₁ v b) (mapALL absbody abs₁) ⦂ ⟨ `- , μ₂ ⟩
+  → ∅ ⊢ mapE (λ b → sub₁ v b) (foldALL absbody abs₁) ⦂ ⟨ `- , μ₂ ⟩
 mixed-abs-minus Aε ⊢s = t-empty
 mixed-abs-minus (abs₁ A· abs₂) ⊢s
   with t-head-inversion ⊢s
@@ -743,7 +720,7 @@ mapE-sub₁ {e = app e e₁} = refl
   → ∅ ⊢ w ⦂ ⟨ η₃ , μ₁ ⟩
   → MUL η₁ η₂ η′
   → MUL η′ η₃ η
-  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (mapALL absbody (abs₁ A· abs₂))) w ⦂ ⟨ η , μ₂ ⟩
+  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (foldALL absbody (abs₁ A· abs₂))) w ⦂ ⟨ η , μ₂ ⟩
 
 
 β₁-pres-s-AP-concat : ∀ {v w μ₁ μ₂ η₃ η η′ b}
@@ -887,7 +864,7 @@ mapE-sub₁ {e = app e e₁} = refl
   → ∅ ⊢ w ⦂ ⟨ η₃ , μ₁ ⟩
   → MUL η₁ η₂ η′
   → MUL η′ η₃ η
-  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (mapALL absbody abs₁)) w ⦂ ⟨ η , μ₂ ⟩
+  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (foldALL absbody abs₁)) w ⦂ ⟨ η , μ₂ ⟩
 β₁-pres-s {w = w} {μ₂ = μ₂} vs Aε vw ⊢s ⊢w m₁ m₂
   = t-sub
       (mapE-minus {e = w}
@@ -917,7 +894,7 @@ mapE-sub₁ {e = app e e₁} = refl
       ⊢w₃ = t-sub ⊢w+ (<:ₙ-comb +<:η₃ μ₀<:μ₁)
       head-pres = β₁-pres-s-A· ((vs₁ v· vs₂) {v≢ε = s₁≢ε} {w≢ε = s₂≢ε} {v≢· = s₁≢·}) abs₁ abs₂ vh ⊢s ⊢v₃ m₁ m₂
       tail-pres = β₁-pres-s-A· ((vs₁ v· vs₂) {v≢ε = s₁≢ε} {w≢ε = s₂≢ε} {v≢· = s₁≢·}) abs₁ abs₂ vw ⊢s ⊢w₃ m₁ m₂
-    in β₁-pres-s-AP-concat {b = mapALL absbody (abs₁ A· abs₂)} vh vw v≢ε w≢ε v≢· ⊢vw m₂ head-pres tail-pres
+    in β₁-pres-s-AP-concat {b = foldALL absbody (abs₁ A· abs₂)} vh vw v≢ε w≢ε v≢· ⊢vw m₂ head-pres tail-pres
 β₁-pres-s-A·
   ((vs₁ v· vs₂) {v≢ε = s₁≢ε} {w≢ε = s₂≢ε} {v≢· = s₁≢·})
   abs₁ abs₂ cst ⊢s ⊢w m₁ m₂
@@ -965,7 +942,7 @@ mapE-sub₁ {e = app e e₁} = refl
   → ∅ ⊢ w ⦂ ⟨ η₃ , μ₁ ⟩
   → MUL η₁ η₂ η′
   → MUL η′ η₃ η
-  → ∅ ⊢ mapE (λ b → sub₁ w b) (mapALL mabbody mab₁) ⦂ ⟨ η , μ₂ ⟩
+  → ∅ ⊢ mapE (λ b → sub₁ w b) (foldALL mabbody mab₁) ⦂ ⟨ η , μ₂ ⟩
 βₙ-pres-s mab₁ vw ⊢s ⊢w m₁ m₂
   = t-sub
       (mixed-mab-minus mab₁ ⊢s)
@@ -977,11 +954,11 @@ mapE-sub₁ {e = app e e₁} = refl
   → ∅ ⊢ s ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
   → ∅ ⊢ w ⦂ ημ
   → MUL η₁ η₂ η
-  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (mapALL absbody abs₁)) w ⦂ ⟨ η , μ₂ ⟩
+  → ∅ ⊢ mapE (λ v → mapE (λ b → sub₁ v b) (foldALL absbody abs₁)) w ⦂ ⟨ η , μ₂ ⟩
 β₁-pres-p {w = w} abs₁ vw ⊢s ⊢w m
   = t-sub
       (mapE-minus {e = w}
-        (λ v → mapE (λ b → sub₁ v b) (mapALL absbody abs₁))
+        (λ v → mapE (λ b → sub₁ v b) (foldALL absbody abs₁))
         (λ {x} → mixed-abs-minus abs₁ ⊢s))
       (<:ₙ-comb (MUL-left-empty (mixed-abs-num-empty abs₁ ⊢s) m) <:ₜ-refl)
 
@@ -993,7 +970,7 @@ mapE-sub₁ {e = app e e₁} = refl
   → ∅ ⊢ s ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
   → ∅ ⊢ w ⦂ ημ
   → MUL η₁ η₂ η
-  → ∅ ⊢ mapE (λ b → sub₁ w b) (mapALL mabbody mab₁) ⦂ ⟨ η , μ₂ ⟩
+  → ∅ ⊢ mapE (λ b → sub₁ w b) (foldALL mabbody mab₁) ⦂ ⟨ η , μ₂ ⟩
 βₙ-pres-p vε Aε vw ⊢s ⊢w m
   = t-sub
       t-empty
@@ -1168,3 +1145,61 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done abs
   with t-mab-inversion ⊢e | t-abs-inversion ⊢e₁
 ... | _ , <:ₙ-comb _ (<:ₜ-⇛ _ _) , _ | _ , <:ₙ-comb _ () , _
 progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+
+-- logical relation
+
+𝓥⟦_⟧ : Ty → Pred (Expr zero) lzero
+𝓦⟦_⟧ : NTy → Pred (Expr zero) lzero
+𝓔⟦_⟧ : NTy → Pred (Expr zero) lzero
+
+𝓥⟦ `⊥ ⟧        e  = ⊥
+𝓥⟦ □ ⟧         e  = ∃[ n ] e ≡ cst n
+𝓥⟦ μ ⇒ ημ ⟧    e  = ∃[ μ₀ ]  ∃[ s ] e ≡ abs μ₀ s   × μ <:ₜ μ₀     × ∀ v → v ∈ 𝓥⟦ μ ⟧     → sub₁ v s ∈ 𝓔⟦ ημ ⟧
+
+𝓥⟦ ημ₁ ⇛ ημ ⟧  e  = ∃[ ημ₀ ] ∃[ s ] e ≡ mab ημ₀ s  × ημ₁ <:ₙ ημ₀  × ∀ w → w ∈ 𝓦⟦ ημ₁ ⟧  → sub₁ w s ∈ 𝓔⟦ ημ ⟧
+
+𝓦⟦ ⟨ η , μ ⟩ ⟧ s  = ALL 𝓥⟦ μ ⟧ s × (lengthE s ∈∈ 𝓝⟦ η ⟧)
+
+𝓔⟦ ημ ⟧ s          = ∃[ w ] w ∈ 𝓦⟦ ημ ⟧ × (s ⟶* w) 
+
+-- 𝓖⟦ Γ ⟧ characterizes substitutions σ: if x : ημ ∈ Γ then σ(x) ∈ 𝓦⟦ ημ ⟧
+
+𝓖⟦_⟧ : Ctx n → Sub n zero → Set
+𝓖⟦ Γ ⟧ σ = ∀ x → σ x ∈ 𝓦⟦ lookup  x Γ ⟧
+-- 𝓖⟦ ∅ ⟧ σ = ⊤
+-- 𝓖⟦ ημ ▻ Γ ⟧ σ = (∃[ w ] σ Fin.zero ≡ w × w ∈ 𝓦⟦ ημ ⟧) × (σ ∘ Fin.suc) ∈ 𝓖⟦ Γ ⟧
+
+-- semantic typing
+
+_⊨_⦂_ : Ctx n → Expr n → NTy → Set
+Γ ⊨ e ⦂ ημ = ∀ σ → σ ∈ 𝓖⟦ Γ ⟧ → sub σ e ∈ 𝓔⟦ ημ ⟧
+
+-- semantic subtyping
+
+<:ₙ-subset-𝓔 : ∀ {ημ₁ ημ₂} → ημ₁ <:ₙ ημ₂ → 𝓔⟦ ημ₁ ⟧ ⊆ 𝓔⟦ ημ₂ ⟧
+<:ₙ-subset : ∀ {ημ₁ ημ₂} → ημ₁ <:ₙ ημ₂ → 𝓦⟦ ημ₁ ⟧ ⊆ 𝓦⟦ ημ₂ ⟧
+<:ₜ-subset : ∀ {μ₁ μ₂} → μ₁ <:ₜ μ₂ → 𝓥⟦ μ₁ ⟧ ⊆ 𝓥⟦ μ₂ ⟧
+
+<:ₜ-subset <:ₜ-□ e∈𝓥⟦μ₁⟧ = e∈𝓥⟦μ₁⟧
+<:ₜ-subset (<:ₜ-⇒ μ₂<:μ₁ ημ₁<:ημ₂) (μ₀ , e , x≡ , μ₁<:μ₀ , ∀v∈𝓥) = μ₀ , e , x≡ , (<:ₜ-trans μ₂<:μ₁ μ₁<:μ₀) , (λ v v∈𝓥⟦μ₁⟧ → <:ₙ-subset-𝓔 ημ₁<:ημ₂ (∀v∈𝓥 v (<:ₜ-subset μ₂<:μ₁ v∈𝓥⟦μ₁⟧)))
+<:ₜ-subset (<:ₜ-⇛ ημ₁′<:ημ₁ ημ₂<:ημ₂′) (ημ₀ , e , x≡ , ημ₁<:ημ₀ , ∀w∈𝓦) = ημ₀ , e , x≡ , (<:ₙ-trans ημ₁′<:ημ₁ ημ₁<:ημ₀) , (λ w w∈𝓦⟦ημ₁⟧ → <:ₙ-subset-𝓔 ημ₂<:ημ₂′ (∀w∈𝓦 w (<:ₙ-subset ημ₁′<:ημ₁ w∈𝓦⟦ημ₁⟧)))
+
+<:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (all∈μ₁ , len∈η₁) = mapALL (<:ₜ-subset μ₁<:μ₂) all∈μ₁ , <:₀-subset η₁<:η₂ len∈η₁
+
+<:ₙ-subset-𝓔 (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (e , w∈𝓦 , e⟶*w) = e , <:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) w∈𝓦 , e⟶*w
+
+
+-- fundamental lemma
+
+fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
+fundamental (t-var {x = x}) σ σ∈ = σ x , σ∈ x , ⟶-refl
+fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP (k , refl) , s≤s z≤n , s≤s z≤n) , ⟶-refl
+fundamental (t-abs ⊢e) σ σ∈ = {!!}
+fundamental (t-mab ⊢e) σ σ∈ = {!!}
+fundamental (t-app-s ⊢e ⊢e₁ x x₁) σ σ∈ = {!!}
+fundamental (t-app-p ⊢e ⊢e₁ x) σ σ∈ = {!!}
+fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
+  with fundamental ⊢e σ σ∈
+... | w , (allv-w , len-w-∈) , subσe⟶*w = w , ({!allv-w!} , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
+fundamental t-empty σ σ∈ = ε , (Aε , z≤n , z≤n) , ⟶-refl
+fundamental (t-head ⊢e ⊢e₁ x) σ σ∈ = {!!}
