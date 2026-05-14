@@ -18,19 +18,11 @@ open import Interval
 
 open import Numeri
 open import Types
+open import Expressions
 
 -- expressions
 
 variable m n : ℕ
-
-data Expr (n : ℕ) : Set where
-  ε   : Expr n
-  _·_ : Expr n → Expr n → Expr n
-  var : Fin n → Expr n
-  cst : ℕ → Expr n
-  abs : Ty → Expr (suc n) → Expr n
-  mab : NTy → Expr (suc n) → Expr n
-  app : Expr n → Expr n → Expr n
 
 -- renaming and substitution
 
@@ -80,28 +72,221 @@ extSub : Sub m n → Expr n → Sub (suc m) n
 extSub σ e Fin.zero = e
 extSub σ e (Fin.suc x) = σ x
 
+-- composition of renamings and substitutions
+
+liftSub-cong : ∀ {k m}{σ τ : Sub k m}
+  → (∀ x → σ x ≡ τ x)
+  → ∀ x → liftSub σ x ≡ liftSub τ x
+liftSub-cong σ≡τ Fin.zero = refl
+liftSub-cong σ≡τ (Fin.suc x) rewrite σ≡τ x = refl
+
+sub-cong : ∀ {k m}{σ τ : Sub k m}
+  → (∀ x → σ x ≡ τ x)
+  → ∀ e → sub σ e ≡ sub τ e
+sub-cong σ≡τ ε = refl
+sub-cong σ≡τ (e₁ · e₂)
+  rewrite sub-cong σ≡τ e₁
+        | sub-cong σ≡τ e₂
+  = refl
+sub-cong σ≡τ (var x) = σ≡τ x
+sub-cong σ≡τ (cst x) = refl
+sub-cong σ≡τ (abs μ e)
+  rewrite sub-cong (liftSub-cong σ≡τ) e
+  = refl
+sub-cong σ≡τ (mab ημ e)
+  rewrite sub-cong (liftSub-cong σ≡τ) e
+  = refl
+sub-cong σ≡τ (app e₁ e₂)
+  rewrite sub-cong σ≡τ e₁
+        | sub-cong σ≡τ e₂
+  = refl
+
+extRen-cong : ∀ {k m}{ρ ξ : Ren k m}
+  → (∀ x → ρ x ≡ ξ x)
+  → ∀ x → extRen ρ x ≡ extRen ξ x
+extRen-cong ρ≡ξ Fin.zero = refl
+extRen-cong ρ≡ξ (Fin.suc x) rewrite ρ≡ξ x = refl
+
+ren-cong : ∀ {k m}{ρ ξ : Ren k m}
+  → (∀ x → ρ x ≡ ξ x)
+  → ∀ e → ren ρ e ≡ ren ξ e
+ren-cong ρ≡ξ ε = refl
+ren-cong ρ≡ξ (e₁ · e₂)
+  rewrite ren-cong ρ≡ξ e₁
+        | ren-cong ρ≡ξ e₂
+  = refl
+ren-cong ρ≡ξ (var x) rewrite ρ≡ξ x = refl
+ren-cong ρ≡ξ (cst x) = refl
+ren-cong ρ≡ξ (abs μ e)
+  rewrite ren-cong (extRen-cong ρ≡ξ) e
+  = refl
+ren-cong ρ≡ξ (mab ημ e)
+  rewrite ren-cong (extRen-cong ρ≡ξ) e
+  = refl
+ren-cong ρ≡ξ (app e₁ e₂)
+  rewrite ren-cong ρ≡ξ e₁
+        | ren-cong ρ≡ξ e₂
+  = refl
+
+ren-comp : ∀ {k m ℓ}{ρ : Ren k m}{ξ : Ren m ℓ}{e : Expr k}
+  → ren ξ (ren ρ e) ≡ ren (ξ ∘ ρ) e
+ren-comp {e = ε} = refl
+ren-comp {ρ = ρ} {ξ = ξ} {e = e₁ · e₂}
+  rewrite ren-comp {ρ = ρ} {ξ = ξ} {e = e₁}
+        | ren-comp {ρ = ρ} {ξ = ξ} {e = e₂}
+  = refl
+ren-comp {e = var x} = refl
+ren-comp {e = cst x} = refl
+ren-comp {ρ = ρ} {ξ = ξ} {e = abs μ e}
+  rewrite ren-comp {ρ = extRen ρ} {ξ = extRen ξ} {e = e}
+        | ren-cong {ρ = extRen ξ ∘ extRen ρ} {ξ = extRen (ξ ∘ ρ)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+  = refl
+ren-comp {ρ = ρ} {ξ = ξ} {e = mab ημ e}
+  rewrite ren-comp {ρ = extRen ρ} {ξ = extRen ξ} {e = e}
+        | ren-cong {ρ = extRen ξ ∘ extRen ρ} {ξ = extRen (ξ ∘ ρ)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+  = refl
+ren-comp {ρ = ρ} {ξ = ξ} {e = app e₁ e₂}
+  rewrite ren-comp {ρ = ρ} {ξ = ξ} {e = e₁}
+        | ren-comp {ρ = ρ} {ξ = ξ} {e = e₂}
+  = refl
+
+sub-ren : ∀ {k m n}{ρ : Ren k m}{σ : Sub m n}{e : Expr k}
+  → sub σ (ren ρ e) ≡ sub (σ ∘ ρ) e
+sub-ren {e = ε} = refl
+sub-ren {ρ = ρ} {σ = σ} {e = e₁ · e₂}
+  rewrite sub-ren {ρ = ρ} {σ = σ} {e = e₁}
+        | sub-ren {ρ = ρ} {σ = σ} {e = e₂}
+  = refl
+sub-ren {e = var x} = refl
+sub-ren {e = cst x} = refl
+sub-ren {ρ = ρ} {σ = σ} {e = abs μ e}
+  rewrite sub-ren {ρ = extRen ρ} {σ = liftSub σ} {e = e}
+        | sub-cong
+            {σ = liftSub σ ∘ extRen ρ}
+            {τ = liftSub (σ ∘ ρ)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+  = refl
+sub-ren {ρ = ρ} {σ = σ} {e = mab ημ e}
+  rewrite sub-ren {ρ = extRen ρ} {σ = liftSub σ} {e = e}
+        | sub-cong
+            {σ = liftSub σ ∘ extRen ρ}
+            {τ = liftSub (σ ∘ ρ)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+  = refl
+sub-ren {ρ = ρ} {σ = σ} {e = app e₁ e₂}
+  rewrite sub-ren {ρ = ρ} {σ = σ} {e = e₁}
+        | sub-ren {ρ = ρ} {σ = σ} {e = e₂}
+  = refl
+
+ren-ext-weaken : ∀ {k m}{ρ : Ren k m}{e : Expr k}
+  → ren (extRen ρ) (weaken e) ≡ weaken (ren ρ e)
+ren-ext-weaken {ρ = ρ} {e = e}
+  rewrite ren-comp {ρ = Fin.suc} {ξ = extRen ρ} {e = e}
+        | ren-comp {ρ = ρ} {ξ = Fin.suc} {e = e}
+        | ren-cong {ρ = extRen ρ ∘ Fin.suc} {ξ = Fin.suc ∘ ρ} (λ x → refl) e
+  = refl
+
+ren-sub : ∀ {k m n}{ρ : Ren m n}{σ : Sub k m}{e : Expr k}
+  → ren ρ (sub σ e) ≡ sub (λ x → ren ρ (σ x)) e
+ren-sub {e = ε} = refl
+ren-sub {ρ = ρ} {σ = σ} {e = e₁ · e₂}
+  rewrite ren-sub {ρ = ρ} {σ = σ} {e = e₁}
+        | ren-sub {ρ = ρ} {σ = σ} {e = e₂}
+  = refl
+ren-sub {e = var x} = refl
+ren-sub {e = cst x} = refl
+ren-sub {ρ = ρ} {σ = σ} {e = abs μ e}
+  rewrite ren-sub {ρ = extRen ρ} {σ = liftSub σ} {e = e}
+        | sub-cong
+            {σ = (λ x → ren (extRen ρ) (liftSub σ x))}
+            {τ = liftSub (λ x → ren ρ (σ x))}
+            (λ { Fin.zero → refl ; (Fin.suc x) → ren-ext-weaken {ρ = ρ} {e = σ x} }) e
+  = refl
+ren-sub {ρ = ρ} {σ = σ} {e = mab ημ e}
+  rewrite ren-sub {ρ = extRen ρ} {σ = liftSub σ} {e = e}
+        | sub-cong
+            {σ = (λ x → ren (extRen ρ) (liftSub σ x))}
+            {τ = liftSub (λ x → ren ρ (σ x))}
+            (λ { Fin.zero → refl ; (Fin.suc x) → ren-ext-weaken {ρ = ρ} {e = σ x} }) e
+  = refl
+ren-sub {ρ = ρ} {σ = σ} {e = app e₁ e₂}
+  rewrite ren-sub {ρ = ρ} {σ = σ} {e = e₁}
+        | ren-sub {ρ = ρ} {σ = σ} {e = e₂}
+  = refl
+
+sub-id : ∀ {k}{e : Expr k} → sub (λ x → var x) e ≡ e
+sub-id {e = ε} = refl
+sub-id {e = e₁ · e₂}
+  rewrite sub-id {e = e₁}
+        | sub-id {e = e₂}
+  = refl
+sub-id {e = var x} = refl
+sub-id {e = cst x} = refl
+sub-id {e = abs μ e}
+  rewrite sub-cong {σ = liftSub (λ x → var x)} {τ = (λ x → var x)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+        | sub-id {e = e}
+  = refl
+sub-id {e = mab ημ e}
+  rewrite sub-cong {σ = liftSub (λ x → var x)} {τ = (λ x → var x)}
+            (λ { Fin.zero → refl ; (Fin.suc x) → refl }) e
+        | sub-id {e = e}
+  = refl
+sub-id {e = app e₁ e₂}
+  rewrite sub-id {e = e₁}
+        | sub-id {e = e₂}
+  = refl
+
+sub₁-weaken : ∀ {m}{v : Expr m}{e : Expr m} → sub₁ v (weaken e) ≡ e
+sub₁-weaken {v = v} {e = e}
+  rewrite sub-ren {ρ = Fin.suc} {σ = sub₁σ v} {e = e}
+  = sub-id
+
+sub-lift-weaken : ∀ {k m}{τ : Sub k m}{e : Expr k}
+  → sub (liftSub τ) (weaken e) ≡ weaken (sub τ e)
+sub-lift-weaken {τ = τ} {e = e}
+  rewrite sub-ren {ρ = Fin.suc} {σ = liftSub τ} {e = e}
+        | ren-sub {ρ = Fin.suc} {σ = τ} {e = e}
+  = sub-cong (λ x → refl) e
+
+sub-comp : ∀ {k m n}{σ : Sub k m}{τ : Sub m n}{e : Expr k}
+  → sub τ (sub σ e) ≡ sub (λ x → sub τ (σ x)) e
+sub-comp {e = ε} = refl
+sub-comp {σ = σ} {τ = τ} {e = e₁ · e₂}
+  rewrite sub-comp {σ = σ} {τ = τ} {e = e₁}
+        | sub-comp {σ = σ} {τ = τ} {e = e₂}
+  = refl
+sub-comp {e = var x} = refl
+sub-comp {e = cst x} = refl
+sub-comp {σ = σ} {τ = τ} {e = abs μ e}
+  rewrite sub-comp {σ = liftSub σ} {τ = liftSub τ} {e = e}
+        | sub-cong
+            {σ = (λ x → sub (liftSub τ) (liftSub σ x))}
+            {τ = liftSub (λ x → sub τ (σ x))}
+            (λ { Fin.zero → refl ; (Fin.suc x) → sub-lift-weaken {τ = τ} {e = σ x} }) e
+  = refl
+sub-comp {σ = σ} {τ = τ} {e = mab ημ e}
+  rewrite sub-comp {σ = liftSub σ} {τ = liftSub τ} {e = e}
+        | sub-cong
+            {σ = (λ x → sub (liftSub τ) (liftSub σ x))}
+            {τ = liftSub (λ x → sub τ (σ x))}
+            (λ { Fin.zero → refl ; (Fin.suc x) → sub-lift-weaken {τ = τ} {e = σ x} }) e
+  = refl
+sub-comp {σ = σ} {τ = τ} {e = app e₁ e₂}
+  rewrite sub-comp {σ = σ} {τ = τ} {e = e₁}
+        | sub-comp {σ = σ} {τ = τ} {e = e₂}
+  = refl
+
 sub-ext-lift : {σ : Sub n m}{v : Expr m}{e : Expr (suc n)} → sub (extSub σ v) e ≡ sub₁ v (sub (liftSub σ) e)
-sub-ext-lift = {!!}
-
--- utilities
-
-mapE : (Expr m → Expr n) → Expr m → Expr n
-mapE f ε = ε
-mapE f (e₁ · e₂) = mapE f e₁ · mapE f e₂
-mapE f (var x) = f (var x)
-mapE f (cst x) = f (cst x)
-mapE f (abs x e) = f (abs x e)
-mapE f (mab x e) = f (mab x e)
-mapE f (app e e₁) = f (app e e₁)
-
-lengthE : Expr n → ℕ
-lengthE ε = 0
-lengthE (e₁ · e₂) = lengthE e₁ +ℕ lengthE e₂
-lengthE (var x) = 1
-lengthE (cst x) = 1
-lengthE (abs x e) = 1
-lengthE (mab x e) = 1
-lengthE (app e e₁) = 1
+sub-ext-lift {σ = σ} {v = v} {e = e}
+  rewrite sub-comp {σ = liftSub σ} {τ = sub₁σ v} {e = e}
+  = sub-cong pointwise e
+  where
+    pointwise : ∀ x → extSub σ v x ≡ sub (sub₁σ v) (liftSub σ x)
+    pointwise Fin.zero = refl
+    pointwise (Fin.suc x) rewrite sub₁-weaken {v = v} {e = σ x} = refl
 
 -- values
 
@@ -1212,15 +1397,19 @@ fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
 fundamental (t-var {x = x}) σ σ∈ = σ x , σ∈ x , ⟶-refl
 fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP (k , refl) , s≤s z≤n , s≤s z≤n) , ⟶-refl
 fundamental (t-abs {μ = μ} {s = e} {ημ = ημ} ⊢e) σ σ∈
-  = sub σ (abs μ e) , ((AP (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) sub-ext-lift (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
+  = sub σ (abs μ e) , ((AP (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) (sub-ext-lift {σ = σ} {v = v} {e = e}) (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
 fundamental (t-mab {ημ = ημ} {s} {ημ′} ⊢e) σ σ∈
-  = sub σ (mab ημ s) , ((AP (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ sub-ext-lift (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , s≤s z≤n , s≤s z≤n) , ⟶-refl
+  = sub σ (mab ημ s) , ((AP (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ (sub-ext-lift {σ = σ} {v = w} {e = s}) (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , s≤s z≤n , s≤s z≤n) , ⟶-refl
 fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η₃} ⊢e ⊢e₁ m m₁) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | s , (all∈μ₁⇒η₂μ₂ , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
 ... | w , (all∈μ₁ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
-fundamental (t-app-p ⊢e ⊢e₁ m) σ σ∈ = {!!}
+fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢e₁ m) σ σ∈
+  with fundamental ⊢e σ σ∈
+... | s , (all∈μ₁⇒η₂μ₂ , len∈η₁) , sub-σ-s₁⟶*s
+  with fundamental ⊢e₁ σ σ∈
+... | w , (all∈μ₁ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
