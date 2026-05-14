@@ -11,8 +11,9 @@ open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
 
 open import Function using (_∘_)
+open import Relation.Nullary using (¬_)
 open import Relation.Unary using (Pred; _∈_;_⊆_)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_;_≢_; refl; cong; sym; subst)
 
 open import Interval
 
@@ -1341,6 +1342,18 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab
 
 -- logical relation
 
+irred : Expr zero → Set
+irred e = ∀ e′ → ¬ (e ⟶ e′)
+
+monoidal-nf : Expr zero → Set
+monoidal-nf ε = ⊤
+monoidal-nf (e · e₁) = e ≢ ε × e₁ ≢ ε × ∀ {x y} → e ≢ (x · y) × monoidal-nf e₁
+monoidal-nf (cst x) = ⊤
+monoidal-nf (abs x e) = ⊤
+monoidal-nf (mab x e) = ⊤
+monoidal-nf (app e e₁) = ⊤
+
+
 𝓥⟦_⟧ : Ty → Pred (Expr zero) lzero
 𝓦⟦_⟧ : NTy → Pred (Expr zero) lzero
 𝓔⟦_⟧ : NTy → Pred (Expr zero) lzero
@@ -1351,7 +1364,7 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab
 
 𝓥⟦ ημ₁ ⇛ ημ ⟧  e  = ∃[ ημ₀ ] ∃[ s ] e ≡ mab ημ₀ s  × ημ₁ <:ₙ ημ₀  × ∀ w → w ∈ 𝓦⟦ ημ₁ ⟧  → sub₁ w s ∈ 𝓔⟦ ημ ⟧
 
-𝓦⟦ ⟨ η , μ ⟩ ⟧ s  = ALL 𝓥⟦ μ ⟧ s × (lengthE s ∈∈ 𝓝⟦ η ⟧)
+𝓦⟦ ⟨ η , μ ⟩ ⟧ s  = ALL 𝓥⟦ μ ⟧ s × monoidal-nf s × (lengthE s ∈∈ 𝓝⟦ η ⟧)
 
 𝓔⟦ ημ ⟧ s          = ∃[ w ] w ∈ 𝓦⟦ ημ ⟧ × (s ⟶* w) 
 
@@ -1371,6 +1384,77 @@ length-𝓥 {μ = □} (_ , refl) = refl
 length-𝓥 {μ = μ ⇒ ημ} (_ , _ , refl , _) = refl
 length-𝓥 {μ = ημ ⇛ ημ₁} (_ , _ , refl , _) = refl
 
+value-𝓥 : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → Value e
+value-𝓥 {μ = □} (_ , refl) = cst
+value-𝓥 {μ = μ ⇒ ημ} (_ , _ , refl , _) = abs
+value-𝓥 {μ = x ⇛ x₁} (_ , _ , refl , _) = mab
+
+-- ALL-proj₁ : {P : Pred (Expr zero) lzero}{e₁ e₂ : Expr zero} → ALL P (e₁ · e₂) → ALL P e₁
+-- ALL-proj₁ (all A· all₁) = all
+-- ALL-proj₁ (AP x) = {!!}
+-- ALL-proj₂ : {P : Pred (Expr zero) lzero}{e₁ e₂ : Expr zero} → ALL P (e₁ · e₂) → ALL P e₂
+-- ALL-proj₂ = {!!}
+
+-- irred-monoidal : ∀ {e}{μ} → irred e → ALL 𝓥⟦ μ ⟧ e → monoidal-nf e
+-- irred-monoidal {ε} irr all-v = tt
+-- irred-monoidal {ε · e₁} irr all-v = ⊥-elim (irr e₁ mon-ε-unit-left)
+-- irred-monoidal {(e · e₂) · e₁} irr all-v = ⊥-elim (irr (e · (e₂ · e₁)) mon-·-assoc)
+-- irred-monoidal {cst x · ε} irr all-v = ⊥-elim (irr (cst x) mon-ε-unit-right)
+-- irred-monoidal {cst x · (e₁ · e₂)} irr all-v = (λ ()) , ((λ ()) , (λ ()) , irred-monoidal {!!} {!!})
+-- irred-monoidal {cst x · cst x₁} irr all-v = (λ ()) , ((λ ()) , ((λ ()) , tt))
+-- irred-monoidal {cst x · abs x₁ e₁} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
+-- irred-monoidal {cst x · mab x₁ e₁} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
+-- irred-monoidal {cst x · app e₁ e₂} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
+-- irred-monoidal {abs x e · e₁} irr all-v = {!!}
+-- irred-monoidal {mab x e · e₁} irr all-v = {!!}
+-- irred-monoidal {app e e₂ · e₁} irr all-v = {!!}
+-- irred-monoidal {cst x} irr all-v = tt
+-- irred-monoidal {abs x e} irr all-v = tt
+-- irred-monoidal {mab x e} irr all-v = tt
+-- irred-monoidal {app e e₁} irr all-v = tt
+
+
+
+value-monoidal-nf : ∀ {e} → Value e → monoidal-nf e
+value-monoidal-nf vε = tt
+value-monoidal-nf ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·})
+  = v≢ε , w≢ε , (λ {x} {y} → v≢· , value-monoidal-nf vw)
+value-monoidal-nf cst = tt
+value-monoidal-nf abs = tt
+value-monoidal-nf mab = tt
+
+¬1≤0 : ¬ (1 ≤ℕ 0)
+¬1≤0 ()
+
+value-𝓦 : ∀ {e}{ημ} → e ∈ 𝓦⟦ ημ ⟧ → Value e
+value-𝓦 {ημ = ⟨ η , μ ⟩} (all∈𝓥 , nf , len∈) = value-all-nf all∈𝓥 nf
+  where
+    atomic-from-all : ∀ {e}
+      → ALL 𝓥⟦ μ ⟧ e
+      → e ≢ ε
+      → (∀ {x y} → e ≢ (x · y))
+      → Value e
+    atomic-from-all Aε e≢ε e≢· = ⊥-elim (e≢ε refl)
+    atomic-from-all (_ A· _) e≢ε e≢· = ⊥-elim (e≢· refl)
+    atomic-from-all (AP e∈𝓥) e≢ε e≢· = value-𝓥 e∈𝓥
+
+    value-all-nf : ∀ {e}
+      → ALL 𝓥⟦ μ ⟧ e
+      → monoidal-nf e
+      → Value e
+    value-all-nf Aε nf = vε
+    value-all-nf (AP e∈𝓥) nf = value-𝓥 e∈𝓥
+    value-all-nf {e = e₁ · e₂} (all₁ A· all₂) (e₁≢ε , e₂≢ε , tail)
+      = let
+          e₁≢· : ∀ {x y} → e₁ ≢ (x · y)
+          e₁≢· {x} {y} = proj₁ (tail {x = x} {y = y})
+          nf₂  = proj₂ (tail {x = ε} {y = ε})
+        in
+          ((atomic-from-all all₁ e₁≢ε e₁≢·) v· (value-all-nf all₂ nf₂))
+            {v≢ε = e₁≢ε}
+            {w≢ε = e₂≢ε}
+            {v≢· = e₁≢·}
+
 -- semantic typing
 
 _⊨_⦂_ : Ctx n → Expr n → NTy → Set
@@ -1386,7 +1470,7 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 <:ₜ-subset (<:ₜ-⇒ μ₂<:μ₁ ημ₁<:ημ₂) (μ₀ , e , x≡ , μ₁<:μ₀ , ∀v∈𝓥) = μ₀ , e , x≡ , (<:ₜ-trans μ₂<:μ₁ μ₁<:μ₀) , (λ v v∈𝓥⟦μ₁⟧ → <:ₙ-subset-𝓔 ημ₁<:ημ₂ (∀v∈𝓥 v (<:ₜ-subset μ₂<:μ₁ v∈𝓥⟦μ₁⟧)))
 <:ₜ-subset (<:ₜ-⇛ ημ₁′<:ημ₁ ημ₂<:ημ₂′) (ημ₀ , e , x≡ , ημ₁<:ημ₀ , ∀w∈𝓦) = ημ₀ , e , x≡ , (<:ₙ-trans ημ₁′<:ημ₁ ημ₁<:ημ₀) , (λ w w∈𝓦⟦ημ₁⟧ → <:ₙ-subset-𝓔 ημ₂<:ημ₂′ (∀w∈𝓦 w (<:ₙ-subset ημ₁′<:ημ₁ w∈𝓦⟦ημ₁⟧)))
 
-<:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (all∈μ₁ , len∈η₁) = mapALL (<:ₜ-subset μ₁<:μ₂) all∈μ₁ , <:₀-subset η₁<:η₂ len∈η₁
+<:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (all∈μ₁ , nf , len∈η₁) = mapALL (<:ₜ-subset μ₁<:μ₂) all∈μ₁ , nf , <:₀-subset η₁<:η₂ len∈η₁
 
 <:ₙ-subset-𝓔 (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (e , w∈𝓦 , e⟶*w) = e , <:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) w∈𝓦 , e⟶*w
 
@@ -1395,25 +1479,26 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 
 fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
 fundamental (t-var {x = x}) σ σ∈ = σ x , σ∈ x , ⟶-refl
-fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP (k , refl) , s≤s z≤n , s≤s z≤n) , ⟶-refl
+fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP (k , refl) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
 fundamental (t-abs {μ = μ} {s = e} {ημ = ημ} ⊢e) σ σ∈
-  = sub σ (abs μ e) , ((AP (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) (sub-ext-lift {σ = σ} {v = v} {e = e}) (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
+  = sub σ (abs μ e) , ((AP (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) (sub-ext-lift {σ = σ} {v = v} {e = e}) (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP v∈𝓥) , value-monoidal-nf (value-𝓥 v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , tt , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
 fundamental (t-mab {ημ = ημ} {s} {ημ′} ⊢e) σ σ∈
-  = sub σ (mab ημ s) , ((AP (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ (sub-ext-lift {σ = σ} {v = w} {e = s}) (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , s≤s z≤n , s≤s z≤n) , ⟶-refl
+  = sub σ (mab ημ s) , ((AP (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ (sub-ext-lift {σ = σ} {v = w} {e = s}) (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
 fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η₃} ⊢e ⊢e₁ m m₁) σ σ∈
   with fundamental ⊢e σ σ∈
-... | s , (all∈μ₁⇒η₂μ₂ , len∈η₁) , sub-σ-s₁⟶*s
+... | s , (all∈μ₁⇒η₂μ₂ , _ , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
-... | w , (all∈μ₁ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
+... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
 fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢e₁ m) σ σ∈
   with fundamental ⊢e σ σ∈
-... | s , (all∈μ₁⇒η₂μ₂ , len∈η₁) , sub-σ-s₁⟶*s
+... | s , (all∈μ₁⇒η₂μ₂ , _ , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
-... | w , (all∈μ₁ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
+... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
+  = {!!} , {!!} , {!!}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
-... | w , (allv-w , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
-fundamental t-empty σ σ∈ = ε , (Aε , z≤n , z≤n) , ⟶-refl
+... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
+fundamental t-empty σ σ∈ = ε , (Aε , tt , z≤n , z≤n) , ⟶-refl
 fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w₁ , w₁∈𝓦 , sub-σ-e₁⟶*w₁
