@@ -4,6 +4,7 @@ open import Level using (Level) renaming (zero to lzero)
 
 open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Nat using (ℕ; zero; suc; s≤s; z≤n) renaming (_+_ to _+ℕ_; _≤_ to _≤ℕ_)
+open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Fin using (Fin)
 open import Data.Product using (Σ ; ∃-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
@@ -55,17 +56,17 @@ weaken = ren Fin.suc
 Sub : ℕ → ℕ → Set
 Sub m n = Fin m → Expr n
 
-extSub : Sub m n → Sub (suc m) (suc n)
-extSub σ Fin.zero = var Fin.zero
-extSub σ (Fin.suc x) = weaken (σ x)
+liftSub : Sub m n → Sub (suc m) (suc n)
+liftSub σ Fin.zero = var Fin.zero
+liftSub σ (Fin.suc x) = weaken (σ x)
 
 sub : Sub m n → Expr m → Expr n
 sub σ ε = ε
 sub σ (e₁ · e₂) = sub σ e₁ · sub σ e₂
 sub σ (var x) = σ x
 sub σ (cst k) = cst k
-sub σ (abs μ e) = abs μ (sub (extSub σ) e)
-sub σ (mab ημ e) = mab ημ (sub (extSub σ) e)
+sub σ (abs μ e) = abs μ (sub (liftSub σ) e)
+sub σ (mab ημ e) = mab ημ (sub (liftSub σ) e)
 sub σ (app e e₁) = app (sub σ e) (sub σ e₁)
 
 sub₁σ : Expr n → Sub (suc n) n
@@ -74,6 +75,13 @@ sub₁σ e (Fin.suc x) = var x
 
 sub₁ : Expr n → Expr (suc n) → Expr n
 sub₁ e = sub (sub₁σ e)
+
+extSub : Sub m n → Expr n → Sub (suc m) n
+extSub σ e Fin.zero = e
+extSub σ e (Fin.suc x) = σ x
+
+sub-ext-lift : {σ : Sub n m}{v : Expr m}{e : Expr (suc n)} → sub (extSub σ v) e ≡ sub₁ v (sub (liftSub σ) e)
+sub-ext-lift = {!!}
 
 -- utilities
 
@@ -309,7 +317,7 @@ weaken-typed {Γ = Γ} {ημ′ = ημ′} ⊢e = ren-pres ⊢e ρ⊢
 
 sub-typed-ext : ∀ {Γ : Ctx m}{Δ : Ctx n}{σ : Sub m n}{ημ}
   → Δ ⊢ₛ σ ∶ Γ
-  → (ημ ▻ Δ) ⊢ₛ extSub σ ∶ (ημ ▻ Γ)
+  → (ημ ▻ Δ) ⊢ₛ liftSub σ ∶ (ημ ▻ Γ)
 sub-typed-ext σ⊢ Fin.zero = t-var
 sub-typed-ext σ⊢ (Fin.suc x) = weaken-typed (σ⊢ x)
 
@@ -1169,6 +1177,15 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab
 -- 𝓖⟦ ∅ ⟧ σ = ⊤
 -- 𝓖⟦ ημ ▻ Γ ⟧ σ = (∃[ w ] σ Fin.zero ≡ w × w ∈ 𝓦⟦ ημ ⟧) × (σ ∘ Fin.suc) ∈ 𝓖⟦ Γ ⟧
 
+ext-𝓖 : ∀ {Γ : Ctx n}{σ : Sub n zero} {e : Expr zero} {ημ} → σ ∈ 𝓖⟦ Γ ⟧ → e ∈ 𝓦⟦ ημ ⟧ → extSub σ e ∈ 𝓖⟦ ημ ▻ Γ ⟧
+ext-𝓖 σ∈𝓖 e∈𝓦 Fin.zero = e∈𝓦
+ext-𝓖 σ∈𝓖 e∈𝓦 (Fin.suc x) = σ∈𝓖 x
+
+length-𝓥 : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → lengthE e ≡ 1
+length-𝓥 {μ = □} (_ , refl) = refl
+length-𝓥 {μ = μ ⇒ ημ} (_ , _ , refl , _) = refl
+length-𝓥 {μ = ημ ⇛ ημ₁} (_ , _ , refl , _) = refl
+
 -- semantic typing
 
 _⊨_⦂_ : Ctx n → Expr n → NTy → Set
@@ -1194,12 +1211,23 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
 fundamental (t-var {x = x}) σ σ∈ = σ x , σ∈ x , ⟶-refl
 fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP (k , refl) , s≤s z≤n , s≤s z≤n) , ⟶-refl
-fundamental (t-abs ⊢e) σ σ∈ = {!!}
-fundamental (t-mab ⊢e) σ σ∈ = {!!}
-fundamental (t-app-s ⊢e ⊢e₁ x x₁) σ σ∈ = {!!}
-fundamental (t-app-p ⊢e ⊢e₁ x) σ σ∈ = {!!}
+fundamental (t-abs {μ = μ} {s = e} {ημ = ημ} ⊢e) σ σ∈
+  = sub σ (abs μ e) , ((AP (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) sub-ext-lift (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
+fundamental (t-mab {ημ = ημ} {s} {ημ′} ⊢e) σ σ∈
+  = sub σ (mab ημ s) , ((AP (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ sub-ext-lift (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , s≤s z≤n , s≤s z≤n) , ⟶-refl
+fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η₃} ⊢e ⊢e₁ m m₁) σ σ∈
+  with fundamental ⊢e σ σ∈
+... | s , (all∈μ₁⇒η₂μ₂ , len∈η₁) , sub-σ-s₁⟶*s
+  with fundamental ⊢e₁ σ σ∈
+... | w , (all∈μ₁ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
+fundamental (t-app-p ⊢e ⊢e₁ m) σ σ∈ = {!!}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
-... | w , (allv-w , len-w-∈) , subσe⟶*w = w , ({!allv-w!} , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
+... | w , (allv-w , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
 fundamental t-empty σ σ∈ = ε , (Aε , z≤n , z≤n) , ⟶-refl
-fundamental (t-head ⊢e ⊢e₁ x) σ σ∈ = {!!}
+fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
+  with fundamental ⊢e σ σ∈
+... | w₁ , w₁∈𝓦 , sub-σ-e₁⟶*w₁
+  with fundamental ⊢e₁ σ σ∈
+... | w₂ , w₂∈𝓦 , sub-σ-e₂⟶*w₁
+  = {!!}
