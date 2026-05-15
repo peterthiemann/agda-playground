@@ -1,11 +1,11 @@
 module Numeri where
 
 open import Level using (Level) renaming (zero to lzero)
-open import Data.Empty using (⊥)
+open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
 open import Data.Fin using (Fin)
 open import Data.Nat using (ℕ; zero; suc; z≤n; s≤s) renaming (_⊔_ to _⊔ℕ_; _⊓_ to _⊓ℕ_; _≤_ to _≤ℕ_; _*_ to _*ℕ_; _+_ to _+ℕ_)
-open import Data.Nat.Properties using (+-identityʳ; *-zeroʳ; ≤-refl)
+open import Data.Nat.Properties using (+-identityʳ; *-zeroʳ; ≤-refl; ≤-trans; ≤-antisym; m≤n+m; m≤m+n)
 open import Data.Product using (Σ; _×_; _,_; proj₁; proj₂; ∃-syntax)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.List using (List; []; _∷_; length; map; concat; _++_)
@@ -14,7 +14,7 @@ open import Data.List.Relation.Unary.Any  using (here; there)
 open import Data.List.Membership.Propositional renaming (_∈_ to _∈′_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Relation.Unary using (Pred; _∈_)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; cong; sym)
 open import Function using (_∘_)
 
 open import Interval
@@ -79,11 +79,34 @@ ADD `* `! = `+
 ADD `* `? = `*
 ADD `* `* = `*
 ADD `* `+ = `+
-ADD `+ `- = `+
-ADD `+ `! = `+
-ADD `+ `? = `+
-ADD `+ `* = `+
-ADD `+ `+ = `+
+ADD `+ η = `+
+
+ADD-comm : ∀ {η₁ η₂} → ADD η₁ η₂ ≡ ADD η₂ η₁
+ADD-comm {`- } {`- } = refl
+ADD-comm {`- } {`!} = refl
+ADD-comm {`- } {`?} = refl
+ADD-comm {`- } {`*} = refl
+ADD-comm {`- } {`+} = refl
+ADD-comm {`!} {`- } = refl
+ADD-comm {`!} {`!} = refl
+ADD-comm {`!} {`?} = refl
+ADD-comm {`!} {`*} = refl
+ADD-comm {`!} {`+} = refl
+ADD-comm {`?} {`- } = refl
+ADD-comm {`?} {`!} = refl
+ADD-comm {`?} {`?} = refl
+ADD-comm {`?} {`*} = refl
+ADD-comm {`?} {`+} = refl
+ADD-comm {`*} {`- } = refl
+ADD-comm {`*} {`!} = refl
+ADD-comm {`*} {`?} = refl
+ADD-comm {`*} {`*} = refl
+ADD-comm {`*} {`+} = refl
+ADD-comm {`+} {`- } = refl
+ADD-comm {`+} {`!} = refl
+ADD-comm {`+} {`?} = refl
+ADD-comm {`+} {`*} = refl
+ADD-comm {`+} {`+} = refl
 
 ADD-zero : ∀ η₁ η₂ → `- ≡ ADD η₁ η₂ → `- ≡ η₁ × `- ≡ η₂
 ADD-zero `- `- x = x , x
@@ -216,6 +239,59 @@ ADD-sound `+ `! = s≤s z≤n , tt
 ADD-sound `+ `? = s≤s z≤n , tt
 ADD-sound `+ `* = s≤s z≤n , tt
 ADD-sound `+ `+ = s≤s z≤n , tt
+
+
+ADD-suc : ∀ {η}{k} → k ∈∈ 𝓝⟦ η ⟧ → suc k ∈∈ 𝓝⟦ ADD `! η ⟧
+ADD-suc {`- } (0≤k , k≤0) = s≤s 0≤k , s≤s k≤0
+ADD-suc {`!} (1≤k , k≤1) = s≤s z≤n
+ADD-suc {`?} (0≤k , k≤1) = s≤s 0≤k
+ADD-suc {`*} k∈ = s≤s k∈
+ADD-suc {`+} k∈ = s≤s z≤n
+
+ADD-suc? : ∀ {η}{k} → k ∈∈ 𝓝⟦ η ⟧ → suc k ∈∈ 𝓝⟦ ADD `? η ⟧
+ADD-suc? {`- } (0≤k , k≤0) = z≤n , s≤s k≤0
+ADD-suc? {`!} k∈ = s≤s z≤n
+ADD-suc? {`?} k∈ = z≤n
+ADD-suc? {`*} k∈ = z≤n
+ADD-suc? {`+} k∈ = s≤s z≤n
+
+suc-not-empty : ∀ {η}{k} → suc k ∈∈ 𝓝⟦ η ⟧ → η ≢ `-
+suc-not-empty {`- } () η≡ε
+suc-not-empty {`!} suck∈ ()
+suc-not-empty {`?} suck∈ ()
+suc-not-empty {`*} suck∈ ()
+suc-not-empty {`+} suck∈ ()
+
+DEC : Num → Num
+DEC `- = `-
+DEC `! = `-
+DEC `? = `-
+DEC `* = `*
+DEC `+ = `*
+
+DEC-sound : ∀ {η}{k} → (k∈ : suc k ∈∈ 𝓝⟦ η ⟧) → k ∈∈ 𝓝⟦ DEC η ⟧
+DEC-sound {`!} (s≤s z≤n , s≤s z≤n) = z≤n , z≤n
+DEC-sound {`?} (z≤n , s≤s z≤n) = z≤n , z≤n
+DEC-sound {`*} k∈ = z≤n
+DEC-sound {`+} k∈ = z≤n
+
+DEC-complete : ∀ {η}{k} → η ≢ `- → (k∈ : k ∈∈ 𝓝⟦ DEC η ⟧) → suc k ∈∈ 𝓝⟦ η ⟧
+DEC-complete {`- } η≢ k∈ = ⊥-elim (η≢ refl)
+DEC-complete {`!} η≢ (0≤k , k≤0) = s≤s 0≤k , s≤s k≤0
+DEC-complete {`?} η≢ k∈ = z≤n , s≤s (k∈ .proj₂)
+DEC-complete {`*} η≢ k∈ = z≤n
+DEC-complete {`+} η≢ k∈ = s≤s k∈
+
+ADD-DEC : ∀ {η₁ η₂} {k} → η₁ ≢ `- → k ∈∈ 𝓝⟦ ADD (DEC η₁) η₂ ⟧ → suc k ∈∈ 𝓝⟦ ADD η₁ η₂ ⟧
+ADD-DEC {`- } {η₂} η≢ k∈ = ⊥-elim (η≢ refl)
+ADD-DEC {`!} {η₂} η≢ k∈ = ADD-suc k∈
+ADD-DEC {`?} {η₂} η≢ k∈ = ADD-suc? k∈
+ADD-DEC {`*} {`- } η≢ k∈ = z≤n
+ADD-DEC {`*} {`!} η≢ k∈ = s≤s z≤n
+ADD-DEC {`*} {`?} η≢ k∈ = z≤n
+ADD-DEC {`*} {`*} η≢ k∈ = z≤n
+ADD-DEC {`*} {`+} η≢ k∈ = s≤s z≤n
+ADD-DEC {`+} {η₂} η≢ k∈ = s≤s z≤n
 
 data MUL : Num → Num → Num → Set where
   m0-left : ∀ {η} → MUL `- η `-
@@ -595,3 +671,43 @@ MUL-sound η₁ η₂ {η} m43 = z≤n , tt
 <:₀-subset <:₀-!+ (1≤k , k≤1) = 1≤k
 <:₀-subset <:₀-?* (0≤k , k≤1) = 0≤k
 <:₀-subset <:₀-+* k∈ = z≤n
+
+ADD-0-k : ∀ {η₁}{η₂}{k} → 0 ∈∈ 𝓝⟦ η₁ ⟧ → k ∈∈ 𝓝⟦ η₂ ⟧ → k ∈∈ 𝓝⟦ ADD η₁ η₂ ⟧
+ADD-0-k {`- } {`- } 0∈ k∈ = k∈
+ADD-0-k {`- } {`!} 0∈ k∈ = k∈
+ADD-0-k {`- } {`?} 0∈ k∈ = k∈
+ADD-0-k {`- } {`*} 0∈ k∈ = k∈
+ADD-0-k {`- } {`+} 0∈ k∈ = k∈
+ADD-0-k {`?} {`- } 0∈ (0≤k , k≤0) = 0≤k , ≤-trans k≤0 z≤n
+ADD-0-k {`?} {`!} 0∈ k∈ = k∈ .proj₁
+ADD-0-k {`?} {`?} 0∈ k∈ = k∈ .proj₁
+ADD-0-k {`?} {`*} 0∈ k∈ = k∈
+ADD-0-k {`?} {`+} 0∈ k∈ = k∈
+ADD-0-k {`*} {`- } 0∈ k∈ = k∈ .proj₁
+ADD-0-k {`*} {`!} 0∈ k∈ = k∈ .proj₁
+ADD-0-k {`*} {`?} 0∈ k∈ = k∈ .proj₁
+ADD-0-k {`*} {`*} 0∈ k∈ = k∈
+ADD-0-k {`*} {`+} 0∈ k∈ = k∈
+
+ADD-k-0 : ∀ {η₁}{η₂}{k} → k ∈∈ 𝓝⟦ η₁ ⟧ → 0 ∈∈ 𝓝⟦ η₂ ⟧ → k ∈∈ 𝓝⟦ ADD η₁ η₂ ⟧
+ADD-k-0  {η₁}{η₂} k∈ 0∈ rewrite ADD-comm {η₁}{η₂} = ADD-0-k 0∈ k∈
+
+ADD-i-j : ∀ {η₁}{η₂}{j}{k} → j ∈∈ 𝓝⟦ η₁ ⟧ → k ∈∈ 𝓝⟦ η₂ ⟧ → (j +ℕ k) ∈∈ 𝓝⟦ ADD η₁ η₂ ⟧
+ADD-i-j {`- } {η₂} (0≤j , j≤0) k∈ rewrite ≤-antisym j≤0 0≤j = k∈
+ADD-i-j {`!} {η₂} (1≤j , j≤1) k∈ rewrite ≤-antisym j≤1 1≤j = ADD-suc k∈
+ADD-i-j {`?} {`- } {j} {k} j∈ (0≤k , k≤0)
+  rewrite ≤-antisym k≤0 0≤k
+        | +-identityʳ j
+  = j∈
+ADD-i-j {`?} {`!} {j} {k} j∈ (1≤k , k≤1) = ≤-trans 1≤k (m≤n+m k j)
+ADD-i-j {`?} {`?} j∈ k∈ = z≤n
+ADD-i-j {`?} {`*} j∈ k∈ = z≤n
+ADD-i-j {`?} {`+} {j} {k} j∈ k∈ = ≤-trans k∈ (m≤n+m k j)
+
+ADD-i-j {`*} {`- } j∈ k∈ = z≤n
+ADD-i-j {`*} {`!} {j} {k} j∈ (1≤k , k≤1) = ≤-trans 1≤k (m≤n+m k j)
+ADD-i-j {`*} {`?} j∈ k∈ = z≤n
+ADD-i-j {`*} {`*} j∈ k∈ = z≤n
+ADD-i-j {`*} {`+} {j} {k} j∈ k∈ = ≤-trans k∈ (m≤n+m k j)
+
+ADD-i-j {`+} {η₂} {j} {k} j∈ k∈ = ≤-trans j∈ (m≤m+n j k)

@@ -1102,6 +1102,38 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab
 irred : Expr zero → Set
 irred e = ∀ e′ → ¬ (e ⟶ e′)
 
+head-atomic-no-step
+  : ∀ {v v′}
+  → Value v
+  → (v ≡ ε → ⊥)
+  → (∀ {e₁ e₂} → v ≡ (e₁ · e₂) → ⊥)
+  → v ⟶ v′
+  → ⊥
+head-atomic-no-step vε v≢ε v≢· v⟶v′ = v≢ε refl
+head-atomic-no-step ((_ v· _) {v≢ε = _} {w≢ε = _} {v≢· = _}) v≢ε v≢· v⟶v′ = v≢· refl
+head-atomic-no-step cst v≢ε v≢· ()
+head-atomic-no-step abs v≢ε v≢· ()
+head-atomic-no-step mab v≢ε v≢· ()
+
+value-no-step : ∀ {e e′} → Value e → e ⟶ e′ → ⊥
+value-no-step vε ()
+value-no-step cst ()
+value-no-step abs ()
+value-no-step mab ()
+value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}) (ξ-head v⟶) =
+  head-atomic-no-step vv v≢ε v≢· v⟶
+value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}) (ξ-tail _ w⟶) =
+  value-no-step vw w⟶
+value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}) mon-ε-unit-left =
+  v≢ε refl
+value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}) mon-ε-unit-right =
+  w≢ε refl
+value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}) mon-·-assoc =
+  v≢· refl
+
+value-irred : ∀ {e} → Value e → irred e
+value-irred v e′ e⟶e′ = value-no-step v e⟶e′
+
 monoidal-nf : Expr zero → Set
 monoidal-nf ε = ⊤
 monoidal-nf (e · e₁) = e ≢ ε × e₁ ≢ ε × (∀ {x y} → e ≢ (x · y)) × monoidal-nf e₁
@@ -1238,6 +1270,110 @@ value-𝓦 {ημ = ⟨ η , μ ⟩} (all∈𝓥 , nf , len∈) = value-all-nf al
             {w≢ε = e₂≢ε}
             {v≢· = e₁≢·}
 
+atomic-length : (v : Expr zero) → v ≢ ε → (∀ {x y} → v ≢ (x · y)) → lengthE v ≡ 1
+atomic-length ε v≢ε v≢· = ⊥-elim (v≢ε refl)
+atomic-length (v · v₁) v≢ε v≢· = ⊥-elim (v≢· refl)
+atomic-length (cst x) v≢ε v≢· = refl
+atomic-length (abs x v) v≢ε v≢· = refl
+atomic-length (mab x v) v≢ε v≢· = refl
+atomic-length (app v v₁) v≢ε v≢· = refl
+
+atomic-ALL :  {v : Expr zero} {P : Pred _ lzero} → ALL P v → v ≢ ε → (∀ {x y} → v ≢ (x · y)) → P v
+atomic-ALL Aε v≢ε v≢· = ⊥-elim (v≢ε refl)
+atomic-ALL (all A· all₁) v≢ε v≢· = ⊥-elim (v≢· refl)
+atomic-ALL (AP x) v≢ε v≢· = x
+
+·-preserves-≢ε : ∀ w₁ w₂ {w₁w₂} → Value w₁ → Value w₂ → w₂ ≢ ε → (w₁ · w₂) ⟶* w₁w₂ → w₁w₂ ≢ ε
+·-preserves-≢ε w₁ w₂ v₁ v₂ w₂≢ε ⟶-refl ()
+·-preserves-≢ε w₁ w₂ v₁ v₂ w₂≢ε (⟶-step (ξ-head x) red) w₁w₂≡ε = ⊥-elim (value-no-step v₁ x)
+·-preserves-≢ε w₁ w₂ v₁ v₂ w₂≢ε (⟶-step (ξ-tail x x₁) red) w₁w₂≡ε = ⊥-elim (value-no-step v₂ x₁)
+·-preserves-≢ε w₁ w₂ v₁ v₂ w₂≢ε (⟶-step mon-ε-unit-left red) w₁w₂≡ε with red
+... | ⟶-refl = w₂≢ε w₁w₂≡ε
+... | ⟶-step x red′ = ⊥-elim (value-no-step v₂ x)
+·-preserves-≢ε w₁ w₂ v₁ v₂ w₂≢ε (⟶-step mon-ε-unit-right red) w₁w₂≡ε = ⊥-elim (w₂≢ε refl)
+·-preserves-≢ε (v · w) w₂
+  ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·})
+  v₂
+  w₂≢ε
+  (⟶-step mon-·-assoc red)
+  w₁w₂≡ε
+  = go tail-nonempty red w₁w₂≡ε
+  where
+    tail-nonempty : ∀ {u} → (w · w₂) ⟶* u → u ≢ ε
+    tail-nonempty red′ = ·-preserves-≢ε w w₂ vw v₂ w₂≢ε red′
+
+    go : ∀ {t r}
+      → (∀ {u} → t ⟶* u → u ≢ ε)
+      → (v · t) ⟶* r
+      → r ≢ ε
+    go t-nonempty ⟶-refl ()
+    go t-nonempty (⟶-step (ξ-head x) red′) r≡ε = ⊥-elim (head-atomic-no-step vv v≢ε v≢· x)
+    go t-nonempty (⟶-step (ξ-tail x x₁) red′) r≡ε
+      = go (λ red″ → t-nonempty (⟶-step x₁ red″)) red′ r≡ε
+    go t-nonempty (⟶-step mon-ε-unit-left red′) r≡ε = ⊥-elim (v≢ε refl)
+    go t-nonempty (⟶-step mon-ε-unit-right red′) r≡ε = ⊥-elim (t-nonempty ⟶-refl refl)
+    go t-nonempty (⟶-step mon-·-assoc red′) r≡ε = ⊥-elim (v≢· refl)
+
+·-ALL-preserves-≢ε : ∀ w₁ w₂ {w₁w₂} → ALL Value w₁ → ALL Value w₂ → w₂ ≢ ε → ({x y : Expr 0} → w₂ ≡ (x · y) → ⊥) → (w₁ · w₂) ⟶* w₁w₂ → w₁w₂ ≢ ε
+{-# TERMINATING #-}
+·-ALL-preserves-≢ε w₁ w₂ all₁ all₂ w₂≢ε w₂≢· red
+  = go all₁ tail-nonempty red
+  where
+    ALL-Value-step : ∀ {w w′} → ALL Value w → w ⟶ w′ → ALL Value w′
+    ALL-Value-step Aε ()
+    ALL-Value-step (AP v) red₁ = ⊥-elim (value-no-step v red₁)
+    ALL-Value-step (all₁ A· all₂) (ξ-head x) = ALL-Value-step all₁ x A· all₂
+    ALL-Value-step (all₁ A· all₂) (ξ-tail v x) = all₁ A· ALL-Value-step all₂ x
+    ALL-Value-step (Aε A· all₂) mon-ε-unit-left = all₂
+    ALL-Value-step (AP {e≢ε = e≢ε} x A· all₂) mon-ε-unit-left = ⊥-elim (e≢ε refl)
+    ALL-Value-step (all₁ A· Aε) mon-ε-unit-right = all₁
+    ALL-Value-step (all₁ A· AP {e≢ε = e≢ε} x) mon-ε-unit-right = ⊥-elim (e≢ε refl)
+    ALL-Value-step (AP {e≢· = e≢·} x A· all₂) mon-·-assoc = ⊥-elim (e≢· refl)
+    ALL-Value-step ((all₁ A· all₂) A· all₃) mon-·-assoc = all₁ A· (all₂ A· all₃)
+
+    v₂ : Value w₂
+    v₂ = atomic-ALL all₂ w₂≢ε w₂≢·
+
+    tail-nonempty : ∀ {u} → w₂ ⟶* u → u ≢ ε
+    tail-nonempty ⟶-refl = w₂≢ε
+    tail-nonempty (⟶-step x red′) = ⊥-elim (value-no-step v₂ x)
+
+    go : ∀ {a t r}
+      → ALL Value a
+      → (∀ {u} → t ⟶* u → u ≢ ε)
+      → (a · t) ⟶* r
+      → r ≢ ε
+    go all-a t-nonempty ⟶-refl ()
+    go all-a t-nonempty (⟶-step (ξ-head x) red′) r≡ε
+      = go (ALL-Value-step all-a x) t-nonempty red′ r≡ε
+    go all-a t-nonempty (⟶-step (ξ-tail v x) red′) r≡ε
+      = go all-a (λ red″ → t-nonempty (⟶-step x red″)) red′ r≡ε
+    go all-a t-nonempty (⟶-step mon-ε-unit-left red′) r≡ε
+      = t-nonempty red′ r≡ε
+    go all-a t-nonempty (⟶-step mon-ε-unit-right red′) r≡ε
+      = ⊥-elim (t-nonempty ⟶-refl refl)
+    go (AP {e≢· = e≢·} x₂) t-nonempty (⟶-step mon-·-assoc red′) r≡ε
+      = ⊥-elim (e≢· refl)
+    go (all-a₁ A· all-a₂) t-nonempty (⟶-step mon-·-assoc red′) r≡ε
+      = go all-a₁ (λ red″ → go all-a₂ t-nonempty red″) red′ r≡ε
+
+compatible-· : ∀ {w₁ w₂}{η₁ η₂}{μ} → w₁ ∈ 𝓦⟦ ⟨ η₁ , μ ⟩ ⟧ → w₂ ∈ 𝓦⟦ ⟨ η₂ , μ ⟩ ⟧ → w₁ · w₂ ∈ 𝓔⟦ ⟨ (ADD η₁ η₂) , μ ⟩ ⟧
+compatible-· {w₂ = w₂} (Aε , mono₁ , len₁) (ap₂ , mono₂ , len₂) = w₂ , (ap₂ , mono₂ , ADD-0-k len₁ len₂) , (⟶-step mon-ε-unit-left ⟶-refl)
+compatible-· {w₁ = w₁} (all₁@(_ A· _) , mono₁ , len₁) (Aε , mono₂ , len₂)
+  = w₁ , ((all₁ , mono₁ , ADD-k-0 len₁ len₂) , (⟶-step mon-ε-unit-right ⟶-refl))
+compatible-· (all₁@(_ A· _) , mono₁ , len₁) (all₂@(_ A· _) , mono₂ , len₂) = {!!}
+compatible-· {w₁ = v · w₁} {w₂ = w₂} {η₁} ((ap₁ A· all₁) , (v≢ε , w₁≢ε , v≢· , mono₁) , len₁) w₂∈@(all₂@(AP {e≢ε = w₂≢ε} {e≢· = w₂≢·} x) , mono₂ , len₂)
+  rewrite atomic-length v v≢ε v≢·
+  with compatible-· {w₁ = w₁} {w₂ = w₂} {η₁ = DEC η₁} (all₁ , mono₁ , DEC-sound {η₁} len₁) w₂∈
+... | w₁w₂ , (all₁₂ , mono₁₂ , len₁₂) , red
+  = (v · w₁w₂) , (((ap₁ A· all₁₂) , (v≢ε , (·-ALL-preserves-≢ε w₁ w₂ {w₁w₂} (mapALL value-𝓥 all₁) (mapALL value-𝓥 all₂) w₂≢ε w₂≢· red  , (v≢· , mono₁₂))) , subst (λ □ → (□ +ℕ lengthE w₁w₂) ∈∈ 𝓝⟦ ADD η₁ _ ⟧) (sym (atomic-length v v≢ε v≢·)) (ADD-DEC (suc-not-empty {η₁} len₁) len₁₂)) , ⟶-step mon-·-assoc (ξ-tail-* (value-𝓥 (atomic-ALL ap₁ v≢ε v≢·)) red))
+compatible-· {w₁ = w₁} {w₂ = w₂} (ap₁@(AP v) , mono₁ , len₁) (Aε , mono₂ , len₂)
+  = w₁ , (ap₁ , mono₁ , ADD-k-0 len₁ len₂ ) , (⟶-step mon-ε-unit-right ⟶-refl)
+compatible-· {w₁ = w₁} {w₂ = w₂} (ap₁@(AP {e≢ε = w₁≢ε} {e≢· = w₁≢·} v) , mono₁ , len₁) (ap₂@(_ A· _) , mono₂ , len₂)
+  = (w₁ · w₂) , ((ap₁ A· ap₂) , ((w₁≢ε , ((λ ()) , (w₁≢· , ((mono₂ .proj₁) , ((mono₂ .proj₂ .proj₁) , ((mono₂ .proj₂ .proj₂ .proj₁) , (mono₂ .proj₂ .proj₂ .proj₂))))))) , ADD-i-j len₁ len₂)) , ⟶-refl
+compatible-· {w₁ = w₁} {w₂ = w₂} (ap₁@(AP {e≢ε = w₁≢ε} {e≢· = w₁≢·} v) , mono₁ , len₁) (ap₂@(AP {e≢ε = w₂≢ε} {e≢· = w₂≢·} x) , mono₂ , len₂)
+  = (w₁ · w₂) , (((AP  {e≢ε = w₁≢ε} {e≢· = w₁≢·} v A· AP {e≢ε = w₂≢ε} {e≢· = w₂≢·} x) , ((w₁≢ε , (w₂≢ε , (w₁≢· , mono₂))) , (ADD-i-j len₁ len₂))) , ⟶-refl)
+
 -- semantic typing
 
 _⊨_⦂_ : Ctx n → Expr n → NTy → Set
@@ -1277,7 +1413,7 @@ fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢
 ... | s , (all∈μ₁⇒η₂μ₂ , _ , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
 ... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
-  = {!!} , {!!} , {!!}
+  = w , {!!} , {!!}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
@@ -1287,4 +1423,4 @@ fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
 ... | w₁ , w₁∈𝓦 , sub-σ-e₁⟶*w₁
   with fundamental ⊢e₁ σ σ∈
 ... | w₂ , w₂∈𝓦 , sub-σ-e₂⟶*w₁
-  = {!!}
+  = {!value-· {w₁} {w₂} (value-𝓦 w₁∈𝓦) (value-𝓦 w₂∈𝓦)!}
