@@ -1314,59 +1314,33 @@ atomic-ALL (AP x) v≢ε v≢· = x
     go t-nonempty (⟶-step mon-ε-unit-right red′) r≡ε = ⊥-elim (t-nonempty ⟶-refl refl)
     go t-nonempty (⟶-step mon-·-assoc red′) r≡ε = ⊥-elim (v≢· refl)
 
-·-ALL-preserves-≢ε : ∀ w₁ w₂ {w₁w₂} → ALL Value w₁ → ALL Value w₂ → w₂ ≢ ε → ({x y : Expr 0} → w₂ ≡ (x · y) → ⊥) → (w₁ · w₂) ⟶* w₁w₂ → w₁w₂ ≢ ε
-{-# TERMINATING #-}
-·-ALL-preserves-≢ε w₁ w₂ all₁ all₂ w₂≢ε w₂≢· red
-  = go all₁ tail-nonempty red
+·-ALL-preserves-≢ε' : ∀ w₁ w₂ {w₁w₂} → ALL Value w₁ → ALL Value w₂ → monoidal-nf w₁ → monoidal-nf w₂ → w₂ ≢ ε → (w₁ · w₂) ⟶* w₁w₂ → w₁w₂ ≢ ε
+·-ALL-preserves-≢ε' w₁ w₂ all₁ all₂ nf₁ nf₂ w₂≢ε red
+  = ·-preserves-≢ε w₁ w₂ (all-value-nf→value all₁ nf₁) (all-value-nf→value all₂ nf₂) w₂≢ε red
   where
-    ALL-Value-step : ∀ {w w′} → ALL Value w → w ⟶ w′ → ALL Value w′
-    ALL-Value-step Aε ()
-    ALL-Value-step (AP v) red₁ = ⊥-elim (value-no-step v red₁)
-    ALL-Value-step (all₁ A· all₂) (ξ-head x) = ALL-Value-step all₁ x A· all₂
-    ALL-Value-step (all₁ A· all₂) (ξ-tail v x) = all₁ A· ALL-Value-step all₂ x
-    ALL-Value-step (Aε A· all₂) mon-ε-unit-left = all₂
-    ALL-Value-step (AP {e≢ε = e≢ε} x A· all₂) mon-ε-unit-left = ⊥-elim (e≢ε refl)
-    ALL-Value-step (all₁ A· Aε) mon-ε-unit-right = all₁
-    ALL-Value-step (all₁ A· AP {e≢ε = e≢ε} x) mon-ε-unit-right = ⊥-elim (e≢ε refl)
-    ALL-Value-step (AP {e≢· = e≢·} x A· all₂) mon-·-assoc = ⊥-elim (e≢· refl)
-    ALL-Value-step ((all₁ A· all₂) A· all₃) mon-·-assoc = all₁ A· (all₂ A· all₃)
-
-    v₂ : Value w₂
-    v₂ = atomic-ALL all₂ w₂≢ε w₂≢·
-
-    tail-nonempty : ∀ {u} → w₂ ⟶* u → u ≢ ε
-    tail-nonempty ⟶-refl = w₂≢ε
-    tail-nonempty (⟶-step x red′) = ⊥-elim (value-no-step v₂ x)
-
-    go : ∀ {a t r}
-      → ALL Value a
-      → (∀ {u} → t ⟶* u → u ≢ ε)
-      → (a · t) ⟶* r
-      → r ≢ ε
-    go all-a t-nonempty ⟶-refl ()
-    go all-a t-nonempty (⟶-step (ξ-head x) red′) r≡ε
-      = go (ALL-Value-step all-a x) t-nonempty red′ r≡ε
-    go all-a t-nonempty (⟶-step (ξ-tail v x) red′) r≡ε
-      = go all-a (λ red″ → t-nonempty (⟶-step x red″)) red′ r≡ε
-    go all-a t-nonempty (⟶-step mon-ε-unit-left red′) r≡ε
-      = t-nonempty red′ r≡ε
-    go all-a t-nonempty (⟶-step mon-ε-unit-right red′) r≡ε
-      = ⊥-elim (t-nonempty ⟶-refl refl)
-    go (AP {e≢· = e≢·} x₂) t-nonempty (⟶-step mon-·-assoc red′) r≡ε
-      = ⊥-elim (e≢· refl)
-    go (all-a₁ A· all-a₂) t-nonempty (⟶-step mon-·-assoc red′) r≡ε
-      = go all-a₁ (λ red″ → go all-a₂ t-nonempty red″) red′ r≡ε
+    all-value-nf→value : ∀ {e} → ALL Value e → monoidal-nf e → Value e
+    all-value-nf→value Aε nf = vε
+    all-value-nf→value (AP v) nf = v
+    all-value-nf→value {e = e₁ · e₂} (all₁ A· all₂) (e₁≢ε , e₂≢ε , e₁≢· , nf₂)
+      = ((atomic-ALL all₁ e₁≢ε e₁≢·) v· all-value-nf→value all₂ nf₂)
+          {v≢ε = e₁≢ε}
+          {w≢ε = e₂≢ε}
+          {v≢· = e₁≢·}
 
 compatible-· : ∀ {w₁ w₂}{η₁ η₂}{μ} → w₁ ∈ 𝓦⟦ ⟨ η₁ , μ ⟩ ⟧ → w₂ ∈ 𝓦⟦ ⟨ η₂ , μ ⟩ ⟧ → w₁ · w₂ ∈ 𝓔⟦ ⟨ (ADD η₁ η₂) , μ ⟩ ⟧
 compatible-· {w₂ = w₂} (Aε , mono₁ , len₁) (ap₂ , mono₂ , len₂) = w₂ , (ap₂ , mono₂ , ADD-0-k len₁ len₂) , (⟶-step mon-ε-unit-left ⟶-refl)
 compatible-· {w₁ = w₁} (all₁@(_ A· _) , mono₁ , len₁) (Aε , mono₂ , len₂)
   = w₁ , ((all₁ , mono₁ , ADD-k-0 len₁ len₂) , (⟶-step mon-ε-unit-right ⟶-refl))
-compatible-· (all₁@(_ A· _) , mono₁ , len₁) (all₂@(_ A· _) , mono₂ , len₂) = {!!}
+compatible-· {w₁ = v · w₁} {w₂ = w₂} {η₁} ((ap₁ A· all₁) , (v≢ε , w₁≢ε , v≢· , mono₁) , len₁) w₂∈@(all₂@(_ A· _) , mono₂ , len₂)
+  rewrite atomic-length v v≢ε v≢·
+  with compatible-· {w₁ = w₁} {w₂ = w₂} {η₁ = DEC η₁} (all₁ , mono₁ , DEC-sound {η₁} len₁) w₂∈
+... | w₁w₂ , (all₁₂ , mono₁₂ , len₁₂) , red
+  = (v · w₁w₂) , ((ap₁ A· all₁₂) , (v≢ε , (·-ALL-preserves-≢ε' w₁ w₂ {w₁w₂} (mapALL value-𝓥 all₁) (mapALL value-𝓥 all₂) mono₁ mono₂ (λ ()) red  , (v≢· , mono₁₂))) , subst (λ □ → (□ +ℕ lengthE w₁w₂) ∈∈ 𝓝⟦ ADD η₁ _ ⟧) (sym (atomic-length v v≢ε v≢·)) (ADD-DEC (suc-not-empty {η₁} len₁) len₁₂)) , ⟶-step mon-·-assoc (ξ-tail-* (value-𝓥 (atomic-ALL ap₁ v≢ε v≢·)) red)
 compatible-· {w₁ = v · w₁} {w₂ = w₂} {η₁} ((ap₁ A· all₁) , (v≢ε , w₁≢ε , v≢· , mono₁) , len₁) w₂∈@(all₂@(AP {e≢ε = w₂≢ε} {e≢· = w₂≢·} x) , mono₂ , len₂)
   rewrite atomic-length v v≢ε v≢·
   with compatible-· {w₁ = w₁} {w₂ = w₂} {η₁ = DEC η₁} (all₁ , mono₁ , DEC-sound {η₁} len₁) w₂∈
 ... | w₁w₂ , (all₁₂ , mono₁₂ , len₁₂) , red
-  = (v · w₁w₂) , (((ap₁ A· all₁₂) , (v≢ε , (·-ALL-preserves-≢ε w₁ w₂ {w₁w₂} (mapALL value-𝓥 all₁) (mapALL value-𝓥 all₂) w₂≢ε w₂≢· red  , (v≢· , mono₁₂))) , subst (λ □ → (□ +ℕ lengthE w₁w₂) ∈∈ 𝓝⟦ ADD η₁ _ ⟧) (sym (atomic-length v v≢ε v≢·)) (ADD-DEC (suc-not-empty {η₁} len₁) len₁₂)) , ⟶-step mon-·-assoc (ξ-tail-* (value-𝓥 (atomic-ALL ap₁ v≢ε v≢·)) red))
+  = (v · w₁w₂) , ((ap₁ A· all₁₂) , (v≢ε , (·-ALL-preserves-≢ε' w₁ w₂ {w₁w₂} (mapALL value-𝓥 all₁) (mapALL value-𝓥 all₂) mono₁ mono₂ w₂≢ε red  , (v≢· , mono₁₂))) , subst (λ □ → (□ +ℕ lengthE w₁w₂) ∈∈ 𝓝⟦ ADD η₁ _ ⟧) (sym (atomic-length v v≢ε v≢·)) (ADD-DEC (suc-not-empty {η₁} len₁) len₁₂)) , ⟶-step mon-·-assoc (ξ-tail-* (value-𝓥 (atomic-ALL ap₁ v≢ε v≢·)) red)
 compatible-· {w₁ = w₁} {w₂ = w₂} (ap₁@(AP v) , mono₁ , len₁) (Aε , mono₂ , len₂)
   = w₁ , (ap₁ , mono₁ , ADD-k-0 len₁ len₂ ) , (⟶-step mon-ε-unit-right ⟶-refl)
 compatible-· {w₁ = w₁} {w₂ = w₂} (ap₁@(AP {e≢ε = w₁≢ε} {e≢· = w₁≢·} v) , mono₁ , len₁) (ap₂@(_ A· _) , mono₂ , len₂)
