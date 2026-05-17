@@ -85,9 +85,18 @@ data _⟶*_ : Expr zero → Expr zero → Set where
 ξ-tail-* val-e ⟶-refl = ⟶-refl
 ξ-tail-* val-e (⟶-step x s⟶*s′) = ⟶-step (ξ-tail val-e x) (ξ-tail-* val-e s⟶*s′)
 
+ξ-head-* : ∀ {e e′ s} → e ⟶* e′ → (e · s) ⟶* (e′ · s)
+ξ-head-* ⟶-refl = ⟶-refl
+ξ-head-* (⟶-step x red) = ⟶-step (ξ-head x) (ξ-head-* red)
+
+
 ⟶*-snoc : ∀ {e₁ e₂ e₃} → e₁ ⟶* e₂ → e₂ ⟶ e₃ → e₁ ⟶* e₃
 ⟶*-snoc ⟶-refl step = ⟶-step step ⟶-refl
 ⟶*-snoc (⟶-step x red) step = ⟶-step x (⟶*-snoc red step)
+
+⟶*-trans : ∀ {e₁ e₂ e₃} → e₁ ⟶* e₂ → e₂ ⟶* e₃ → e₁ ⟶* e₃
+⟶*-trans red₁ ⟶-refl = red₁
+⟶*-trans red₁ (⟶-step x red₂) = ⟶*-trans (⟶*-snoc red₁ x) red₂
 
 -- reduction properties
 
@@ -1393,8 +1402,11 @@ fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
 fundamental t-empty σ σ∈ = ε , (Aε , tt , z≤n , z≤n) , ⟶-refl
 fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
+  rewrite x
   with fundamental ⊢e σ σ∈
 ... | w₁ , w₁∈𝓦 , sub-σ-e₁⟶*w₁
   with fundamental ⊢e₁ σ σ∈
-... | w₂ , w₂∈𝓦 , sub-σ-e₂⟶*w₁
-  = {!value-· {w₁} {w₂} (value-𝓦 w₁∈𝓦) (value-𝓦 w₂∈𝓦)!}
+... | w₂ , w₂∈𝓦 , sub-σ-e₂⟶*w₂
+  with compatible-· w₁∈𝓦 w₂∈𝓦
+... | w , w∈𝓦 , w₁·w₂⟶*w
+  = w , w∈𝓦 , ⟶*-trans (⟶*-trans (ξ-head-* sub-σ-e₁⟶*w₁) (ξ-tail-* (value-𝓦 w₁∈𝓦) sub-σ-e₂⟶*w₂)) w₁·w₂⟶*w
