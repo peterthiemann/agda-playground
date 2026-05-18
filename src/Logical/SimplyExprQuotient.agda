@@ -6,7 +6,7 @@ open import Data.Empty using (⊥; ⊥-elim)
 open import Data.List using (List; []; _∷_; map; foldr; _++_)
 open import Data.List.Properties using (++-assoc; ++-identityʳ; map-++)
 open import Data.Nat using (ℕ; zero; suc; s≤s; z≤n) renaming (_+_ to _+ℕ_; _≤_ to _≤ℕ_)
-open import Data.Nat.Properties using (≤-reflexive; +-identityʳ; +-assoc)
+open import Data.Nat.Properties using (≤-reflexive; ≤-trans; +-identityʳ; +-assoc)
 open import Data.Fin using (Fin)
 open import Data.Product using (Σ ; ∃-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
@@ -1225,14 +1225,14 @@ preserve (t-mab ⊢e) ()
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (ξ-app₁ red) = t-app-s (preserve ⊢s₁ red) ⊢s₂ m₁ m₂
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (ξ-app₂ v₁ red) = t-app-s ⊢s₁ (preserve ⊢s₂ red) m₁ m₂
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (β₁ vs abs₁ v) = β₁-pres-s vs abs₁ v ⊢s₁ ⊢s₂ m₁ m₂
-preserve (t-app-s {s₂ = s₂} ⊢s₁ ⊢s₂ m₁ m₂) (βₙ vs mab₁ v)
-  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁) = βₙ-pres-s mab₁ v ⊢s₁ ⊢s₂ m₁ m₂
+preserve (t-app-s {s₂ = s₂} ⊢s₁ ⊢s₂ m₁ m₂) (βₙ vs mab₁ v)  = βₙ-pres-s mab₁ v ⊢s₁ ⊢s₂ m₁ m₂
+--  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁)
 -- 
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (ξ-app₁ red) = t-app-p (preserve ⊢s₁ red) ⊢s₂ m
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (ξ-app₂ v₁ red) = t-app-p ⊢s₁ (preserve ⊢s₂ red) m
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (β₁ vs abs₁ v) = β₁-pres-p abs₁ v ⊢s₁ ⊢s₂ m
-preserve (t-app-p {s₂ = s₂} ⊢s₁ ⊢s₂ m) (βₙ vs mab₁ v)
-  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁) = βₙ-pres-p vs mab₁ v ⊢s₁ ⊢s₂ m
+preserve (t-app-p {s₂ = s₂} ⊢s₁ ⊢s₂ m) (βₙ vs mab₁ v) = βₙ-pres-p vs mab₁ v ⊢s₁ ⊢s₂ m
+--  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁)
 preserve (t-sub ⊢e ημ<:) red = t-sub (preserve ⊢e red) ημ<:
 preserve t-empty ()
 preserve (t-head ⊢e₁ ⊢e₂ refl) (ξ-head red) = t-head (preserve ⊢e₁ red) ⊢e₂ refl
@@ -1488,6 +1488,9 @@ length-𝓥 {μ = ημ ⇛ ημ₁} (_ , _ , refl , _) = refl
 
 AP-𝓥 : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → ALL 𝓥⟦ μ ⟧ e
 AP-𝓥 {e = e} {μ = μ} e∈𝓥 = AP {e≢ε = 𝓥-≢ε e∈𝓥} {e≢· = 𝓥-≢· e∈𝓥} e∈𝓥
+
+toMab : ∀ {ημ η₂ μ₂}{x} → 𝓥⟦ ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟧ x → MabValue x
+toMab (ημ₀ , b , refl , _ , _) = v-mab ημ₀ b
 
 value-𝓥 : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → Value e
 value-𝓥 {μ = □} (_ , refl) = cst
@@ -1878,17 +1881,99 @@ fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂
 ... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
 fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢e₁ m) σ σ∈
   with fundamental ⊢e σ σ∈
-... | s , 𝓦-s@(all∈μ₁⇒η₂μ₂ , mono-s , len∈η₁) , sub-σ-s₁⟶*s
+... | s , 𝓦-s@((all∈μ₁⇒η₂μ₂) , mono-s , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
 ... | w , 𝓦-w@(all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
   using value-s ← value-𝓦 {ημ = ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩} 𝓦-s
   using value-w ← value-𝓦 𝓦-w
-  using mab-s ← mapALL (λ { (ημ₀ , b , refl , _ , _) → v-mab ημ₀ b }) all∈μ₁⇒η₂μ₂
+  using mab-s ← mapALL toMab all∈μ₁⇒η₂μ₂
   using reduce-to-redex ← (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w))
   using redex ← (s · w)
-  using mbodies , mab-from-s ← foldALL-MONOIDAL mabbody mab-s
   using reduce-redex ←  ⟶*-snoc reduce-to-redex  (βₙ value-s mab-s value-w)
-  = foldALL (sub₁ w ∘ mabbody) mab-s , {!!} , {!!}
+  = let sem = app-p-sem all∈μ₁⇒η₂μ₂ mono-s len∈η₁ m in
+    proj₁ sem , proj₁ (proj₂ sem) , ⟶*-trans reduce-redex (proj₂ (proj₂ sem))
+  where
+    ¬2≤0 : ¬ (suc (suc zero) ≤ℕ zero)
+    ¬2≤0 ()
+
+    ¬2≤1 : ¬ (suc (suc zero) ≤ℕ suc zero)
+    ¬2≤1 (s≤s p) = ¬1≤0 p
+
+    mono-nonempty-len-plus : ∀ {e} → monoidal-nf e → e ≢ ε → lengthE e ∈∈ 𝓝⟦ `+ ⟧
+    mono-nonempty-len-plus {e = ε} mono e≢ε = ⊥-elim (e≢ε refl)
+    mono-nonempty-len-plus {e = e₁ · e₂} (e₁≢ε , e₂≢ε , e₁≢· , mono₂) e≢ε
+      rewrite atomic-length e₁ e₁≢ε e₁≢·
+      = s≤s z≤n
+    mono-nonempty-len-plus {e = cst x} mono e≢ε = s≤s z≤n
+    mono-nonempty-len-plus {e = abs x e} mono e≢ε = s≤s z≤n
+    mono-nonempty-len-plus {e = mab x e} mono e≢ε = s≤s z≤n
+    mono-nonempty-len-plus {e = app e e₁} mono e≢ε = s≤s z≤n
+
+    mono-concat-len-two : ∀ {e₁ e₂} → monoidal-nf (e₁ · e₂) → suc (suc zero) ≤ℕ lengthE (e₁ · e₂)
+    mono-concat-len-two {e₁} {e₂} (e₁≢ε , e₂≢ε , e₁≢· , mono₂)
+      rewrite atomic-length e₁ e₁≢ε e₁≢·
+      with mono-nonempty-len-plus mono₂ e₂≢ε
+    ... | len₂∈+ = s≤s len₂∈+
+
+    concat-plus-super : ∀ {e₁ e₂ η₁} → monoidal-nf (e₁ · e₂) → lengthE (e₁ · e₂) ∈∈ 𝓝⟦ η₁ ⟧ → `+ <:₀ η₁
+    concat-plus-super {η₁ = `- } mono len = ⊥-elim (¬2≤0 (≤-trans (mono-concat-len-two mono) (len .proj₂)))
+    concat-plus-super {η₁ = `!} mono len = ⊥-elim (¬2≤1 (≤-trans (mono-concat-len-two mono) (len .proj₂)))
+    concat-plus-super {η₁ = `?} mono len = ⊥-elim (¬2≤1 (≤-trans (mono-concat-len-two mono) (len .proj₂)))
+    concat-plus-super {η₁ = `*} mono len = <:₀-+*
+    concat-plus-super {η₁ = `+} mono len = <:₀-refl
+
+    app-p-sem
+      : ∀ {s η₁}
+      → (all∈ : ALL 𝓥⟦ ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟧ s)
+      → monoidal-nf s
+      → lengthE s ∈∈ 𝓝⟦ η₁ ⟧
+      → MUL η₁ η₂ η
+      → ∃[ w* ] w* ∈ 𝓦⟦ ⟨ η , μ₂ ⟩ ⟧ × (mapE (sub₁ w) (foldALL mabbody (mapALL toMab all∈)) ⟶* w*)
+    app-p-sem Aε mono len m
+      = ε
+      , (Aε , tt , <:₀-subset (MUL-left-empty (numOfLen-sub len) m) (z≤n , z≤n))
+      , ⟶-refl
+    app-p-sem {η₁ = η₁′} (AP {e = e} {e≢ε = e≢ε} {e≢· = e≢·} (ημ₀ , b , refl , ημ<:ημ₀ , fvw)) mono len m
+      rewrite mapE-sub₁ {w = w} {e = b}
+      = <:ₙ-subset-𝓔 (<:ₙ-comb η₂<:η <:ₜ-refl) (fvw w 𝓦-w)
+      where
+        len! : 1 ∈∈ 𝓝⟦ η₁′ ⟧
+        len! = subst (λ n → n ∈∈ 𝓝⟦ η₁′ ⟧) (atomic-length e e≢ε e≢·) len
+
+        !<:η₁ : `! <:₀ η₁′
+        !<:η₁ = numOfLen-sub len!
+
+        η₂<:η : η₂ <:₀ η
+        η₂<:η = MUL-left-one-super !<:η₁ m
+    app-p-sem {s = s₁ · s₂} {η₁ = η₁′} (all₁ A· all₂) mono-s@(s₁≢ε , s₂≢ε , s₁≢· , mono₂) len m
+      with all₁
+    ... | Aε = ⊥-elim (s₁≢ε refl)
+    ... | (_ A· _) = ⊥-elim (s₁≢· refl)
+    ... | AP {e = e₁} {e≢ε = e₁≢ε} {e≢· = e₁≢·} (ημ₀ , b , refl , ημ<:ημ₀ , fvw)
+      rewrite mapE-sub₁ {w = w} {e = b}
+      with app-p-sem all₂ mono₂ (<:₀-subset (concat-plus-super mono-s len) (mono-nonempty-len-plus mono₂ s₂≢ε)) m
+    ... | w₂* , w₂*∈𝓦 , red₂
+      with <:ₙ-subset-𝓔 (<:ₙ-comb (MUL-left-one-super (<:₀-trans <:₀-!+ (concat-plus-super mono-s len)) m) <:ₜ-refl) (fvw w 𝓦-w)
+    ... | w₁* , w₁*∈𝓦 , red₁
+      with compatible-· w₁*∈𝓦 w₂*∈𝓦
+    ... | w₁₂* , w₁₂*∈𝓦 , red₁₂
+      = <:ₙ-subset-𝓔
+          (<:ₙ-comb (ADD-self-super-mul-left +<:η₁ m) <:ₜ-refl)
+          (w₁₂* , w₁₂*∈𝓦
+          , ⟶*-trans
+              (⟶*-trans
+                (ξ-head-* red₁)
+                (ξ-tail-* (value-𝓦 w₁*∈𝓦) red₂))
+              red₁₂)
+      where
+        +<:η₁ : `+ <:₀ η₁′
+        +<:η₁ = concat-plus-super mono-s len
+
+        η₂<:η : η₂ <:₀ η
+        η₂<:η = MUL-left-one-super (<:₀-trans <:₀-!+ +<:η₁) m
+
+        len₂∈η₁ : lengthE s₂ ∈∈ 𝓝⟦ η₁′ ⟧
+        len₂∈η₁ = <:₀-subset +<:η₁ (mono-nonempty-len-plus mono₂ s₂≢ε)
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
@@ -1902,3 +1987,5 @@ fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
   with compatible-· w₁∈𝓦 w₂∈𝓦
 ... | w , w∈𝓦 , w₁·w₂⟶*w
   = w , w∈𝓦 , ⟶*-trans (⟶*-trans (ξ-head-* sub-σ-e₁⟶*w₁) (ξ-tail-* (value-𝓦 w₁∈𝓦) sub-σ-e₂⟶*w₂)) w₁·w₂⟶*w
+
+
