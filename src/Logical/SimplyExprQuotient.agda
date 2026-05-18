@@ -3,6 +3,7 @@ module SimplyExprQuotient where
 open import Level using (Level) renaming (zero to lzero)
 
 open import Data.Empty using (⊥; ⊥-elim)
+open import Data.List using (List; []; _∷_; map; foldr)
 open import Data.Nat using (ℕ; zero; suc; s≤s; z≤n) renaming (_+_ to _+ℕ_; _≤_ to _≤ℕ_)
 open import Data.Nat.Properties using (≤-reflexive)
 open import Data.Fin using (Fin)
@@ -32,6 +33,20 @@ open import Substitution
 -- values
 
 open import Values
+
+fold-to-singleton : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → P x → Expr n) → Atomic e → ALL P e → Expr n
+fold-to-singleton f (e≢ε , snd) Aε = ⊥-elim (e≢ε refl)
+fold-to-singleton f (fst , e≢·) (all-e A· all-e₁) = ⊥-elim (e≢· refl)
+fold-to-singleton f (fst , snd) (AP x) = f x
+
+fold-to-list : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → P x → Expr n) → Value e → ALL P e → List (Expr n)
+fold-to-list f vε Aε = []
+fold-to-list f vε (AP x) =  f x ∷ []
+fold-to-list f ((val-e v· val-e₁) {v≢ε = v≢ε}{v≢· = v≢·}) (all-e A· all-e₁) = (fold-to-singleton f (v≢ε , v≢·) all-e) ∷ fold-to-list f val-e₁ all-e₁
+fold-to-list f (val-e v· val-e₁) (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+fold-to-list f cst (AP x) = f x ∷ []
+fold-to-list f abs (AP x) = f x ∷ []
+fold-to-list f mab (AP x) = f x ∷ []
 
 -- reduction
 
@@ -75,6 +90,15 @@ data _⟶_ : Expr zero → Expr zero → Set where
     → (mab₁ : ALL MabValue s)
     → Value w
     → app s w ⟶ foldALL (sub₁ w ∘ mabbody) mab₁
+
+data _⟶'_ : Expr zero → Expr zero → Set where
+
+  βₙ : ∀ {s}{w}
+    → (val-s : Value s)
+    → (mab₁ : ALL MabValue s)
+    → Value w
+    → app s w ⟶' let bodies = fold-to-list mabbody val-s mab₁
+                   in  foldr (λ b e₀ → sub₁ w b · e₀) ε bodies
 
 data _⟶*_ : Expr zero → Expr zero → Set where
   ⟶-refl : ∀ {e*} → e* ⟶* e*
@@ -1264,6 +1288,10 @@ value-monoidal-nf mab = tt
 ¬1≤0 : ¬ (1 ≤ℕ 0)
 ¬1≤0 ()
 
+𝓔-decompose :  ∀ {e₁ e₂}{η μ} → (e₁ · e₂) ∈ 𝓔⟦ ⟨ η , μ ⟩ ⟧
+  → ∃[ η₁ ] ∃[ η₂ ] e₁ ∈ 𝓔⟦ ⟨ η₁ , μ ⟩ ⟧ × e₂ ∈ 𝓔⟦ ⟨ η₂ , μ ⟩ ⟧ × ADD η₁ η₂ ≡ η
+𝓔-decompose = {!!}
+
 value-𝓦 : ∀ {e}{ημ} → e ∈ 𝓦⟦ ημ ⟧ → Value e
 value-𝓦 {ημ = ⟨ η , μ ⟩} (all∈𝓥 , nf , len∈) = value-all-nf all∈𝓥 nf
   where
@@ -1405,10 +1433,11 @@ fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢
 ... | s , 𝓦-s@(all∈μ₁⇒η₂μ₂ , mono-s , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
 ... | w , 𝓦-w@(all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
-  using value-s ← value-𝓦 𝓦-s
+  using value-s ← value-𝓦 {ημ = ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩} 𝓦-s
   using value-w ← value-𝓦 𝓦-w
-  using reduce-to-redex ← ⟶*-snoc (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w)) (βₙ value-s {!!} value-w)  
-  = {!!} , {!!} , {!!}
+  using mab-s ← mapALL (λ { (ημ₀ , b , refl , _ , _) → v-mab ημ₀ b }) all∈μ₁⇒η₂μ₂
+  using reduce-to-redex ← ⟶*-snoc (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w)) (βₙ value-s mab-s value-w)  
+  = foldALL (sub₁ w ∘ mabbody) mab-s , {!!} , reduce-to-redex
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
