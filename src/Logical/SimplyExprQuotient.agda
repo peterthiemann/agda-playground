@@ -74,21 +74,27 @@ data _⟶_ : Expr zero → Expr zero → Set where
     → Value s
     → (mab₁ : ALL MabValue s)
     → Value w
-    → app s w ⟶ mapE (λ b → sub₁ w b) (foldALL mabbody mab₁)
-
+    → app s w ⟶ foldALL (sub₁ w ∘ mabbody) mab₁
 
 data _⟶*_ : Expr zero → Expr zero → Set where
   ⟶-refl : ∀ {e*} → e* ⟶* e*
   ⟶-step : ∀ {e₁* e₂* e₃*} → e₁* ⟶ e₂* → e₂* ⟶* e₃* → e₁* ⟶* e₃*
 
+ξ-* : ∀{s}{s′} → {f : Expr 0 → Expr 0} (tag : ∀ {e₁ e₂} → e₁ ⟶ e₂ → f e₁ ⟶ f e₂) → s ⟶* s′ → f s ⟶* f s′
+ξ-* tag ⟶-refl = ⟶-refl
+ξ-* tag (⟶-step x red) = ⟶-step (tag x) (ξ-* tag red)
+
 ξ-tail-* : ∀ {e}{s}{s′} → Value e → s ⟶* s′ → (e · s) ⟶* (e · s′)
-ξ-tail-* val-e ⟶-refl = ⟶-refl
-ξ-tail-* val-e (⟶-step x s⟶*s′) = ⟶-step (ξ-tail val-e x) (ξ-tail-* val-e s⟶*s′)
+ξ-tail-* val-e = ξ-* (ξ-tail val-e)
 
 ξ-head-* : ∀ {e e′ s} → e ⟶* e′ → (e · s) ⟶* (e′ · s)
-ξ-head-* ⟶-refl = ⟶-refl
-ξ-head-* (⟶-step x red) = ⟶-step (ξ-head x) (ξ-head-* red)
+ξ-head-* = ξ-* ξ-head
 
+ξ-app₁-* : ∀ {e e′ s} → e ⟶* e′ → (app e s) ⟶* (app e′ s)
+ξ-app₁-* = ξ-* ξ-app₁
+
+ξ-app₂-* : ∀ {e}{s}{s′} → Value e → s ⟶* s′ → (app e s) ⟶* (app e s′)
+ξ-app₂-* val-e = ξ-* (ξ-app₂ val-e)
 
 ⟶*-snoc : ∀ {e₁ e₂ e₃} → e₁ ⟶* e₂ → e₂ ⟶ e₃ → e₁ ⟶* e₃
 ⟶*-snoc ⟶-refl step = ⟶-step step ⟶-refl
@@ -979,11 +985,14 @@ preserve (t-mab ⊢e) ()
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (ξ-app₁ red) = t-app-s (preserve ⊢s₁ red) ⊢s₂ m₁ m₂
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (ξ-app₂ v₁ red) = t-app-s ⊢s₁ (preserve ⊢s₂ red) m₁ m₂
 preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (β₁ vs abs₁ v) = β₁-pres-s vs abs₁ v ⊢s₁ ⊢s₂ m₁ m₂
-preserve (t-app-s ⊢s₁ ⊢s₂ m₁ m₂) (βₙ vs mab₁ v) = βₙ-pres-s mab₁ v ⊢s₁ ⊢s₂ m₁ m₂
+preserve (t-app-s {s₂ = s₂} ⊢s₁ ⊢s₂ m₁ m₂) (βₙ vs mab₁ v)
+  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁) = βₙ-pres-s mab₁ v ⊢s₁ ⊢s₂ m₁ m₂
+-- 
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (ξ-app₁ red) = t-app-p (preserve ⊢s₁ red) ⊢s₂ m
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (ξ-app₂ v₁ red) = t-app-p ⊢s₁ (preserve ⊢s₂ red) m
 preserve (t-app-p ⊢s₁ ⊢s₂ m) (β₁ vs abs₁ v) = β₁-pres-p abs₁ v ⊢s₁ ⊢s₂ m
-preserve (t-app-p ⊢s₁ ⊢s₂ m) (βₙ vs mab₁ v) = βₙ-pres-p vs mab₁ v ⊢s₁ ⊢s₂ m
+preserve (t-app-p {s₂ = s₂} ⊢s₁ ⊢s₂ m) (βₙ vs mab₁ v)
+  rewrite sym (mapE-foldALL mabbody (sub₁ s₂) (λ {e} → mapE-sub e) mab₁) = βₙ-pres-p vs mab₁ v ⊢s₁ ⊢s₂ m
 preserve (t-sub ⊢e ημ<:) red = t-sub (preserve ⊢e red) ημ<:
 preserve t-empty ()
 preserve (t-head ⊢e₁ ⊢e₂ refl) (ξ-head red) = t-head (preserve ⊢e₁ red) ⊢e₂ refl
@@ -1393,10 +1402,13 @@ fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂
 ... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
 fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢e₁ m) σ σ∈
   with fundamental ⊢e σ σ∈
-... | s , (all∈μ₁⇒η₂μ₂ , _ , len∈η₁) , sub-σ-s₁⟶*s
+... | s , 𝓦-s@(all∈μ₁⇒η₂μ₂ , mono-s , len∈η₁) , sub-σ-s₁⟶*s
   with fundamental ⊢e₁ σ σ∈
-... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
-  = w , {!!} , {!!}
+... | w , 𝓦-w@(all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
+  using value-s ← value-𝓦 𝓦-s
+  using value-w ← value-𝓦 𝓦-w
+  using reduce-to-redex ← ⟶*-snoc (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w)) (βₙ value-s {!!} value-w)  
+  = {!!} , {!!} , {!!}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w

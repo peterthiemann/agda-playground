@@ -3,7 +3,7 @@ module Substitution where
 open import Data.Nat using (ℕ; suc)
 open import Data.Fin using (Fin)
 open import Function using (_∘_)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong₂)
 
 open import Expressions
 
@@ -271,3 +271,14 @@ sub-ext-lift {σ = σ} {v = v} {e = e}
     pointwise : ∀ x → extSub σ v x ≡ sub (sub₁σ v) (liftSub σ x)
     pointwise Fin.zero = refl
     pointwise (Fin.suc x) rewrite sub₁-weaken {v = v} {e = σ x} = refl
+
+-- substitution and mapE
+
+mapE-sub : {σ : Sub n m} (e : Expr n) → mapE (sub σ) e ≡ sub σ e
+mapE-sub ε = refl
+mapE-sub (e · e₁) = cong₂ _·_ (mapE-sub e) (mapE-sub e₁)
+mapE-sub (var x) = refl
+mapE-sub (cst k) = refl
+mapE-sub (abs μ e) = cong (abs μ) refl
+mapE-sub (mab ημ e) = cong (mab ημ) refl
+mapE-sub (app e e₁) = refl

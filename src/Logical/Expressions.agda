@@ -5,7 +5,8 @@ open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; zero; suc) renaming (_+_ to _+ℕ_)
 open import Data.Fin using (Fin)
 open import Relation.Unary using (Pred)
-open import Relation.Binary.PropositionalEquality using (_≡_)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong₂)
+open import Function using (_∘_)
 
 open import Types
 
@@ -66,3 +67,8 @@ foldALL : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → 
 foldALL f Aε = ε
 foldALL f (a A· a₁) = (foldALL f a) · (foldALL f a₁)
 foldALL f (AP Pe) = f Pe
+
+mapE-foldALL : ∀ {m n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (g : ∀ {x} → P x → Expr n) → (f : Expr n → Expr m) → (f-map : ∀ {e} → mapE f e ≡ f e) →  (ap : ALL P e) → mapE f (foldALL g ap) ≡ foldALL (f ∘ g) ap
+mapE-foldALL g f f-map Aε = refl
+mapE-foldALL g f f-map (ap A· ap₁) = cong₂ _·_ (mapE-foldALL g f f-map ap) (mapE-foldALL g f f-map ap₁)
+mapE-foldALL g f f-map (AP ap) = f-map
