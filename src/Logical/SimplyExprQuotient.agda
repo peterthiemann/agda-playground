@@ -3,9 +3,10 @@ module SimplyExprQuotient where
 open import Level using (Level) renaming (zero to lzero)
 
 open import Data.Empty using (⊥; ⊥-elim)
-open import Data.List using (List; []; _∷_; map; foldr)
+open import Data.List using (List; []; _∷_; map; foldr; _++_)
+open import Data.List.Properties using (++-assoc; ++-identityʳ; map-++)
 open import Data.Nat using (ℕ; zero; suc; s≤s; z≤n) renaming (_+_ to _+ℕ_; _≤_ to _≤ℕ_)
-open import Data.Nat.Properties using (≤-reflexive)
+open import Data.Nat.Properties using (≤-reflexive; +-identityʳ; +-assoc)
 open import Data.Fin using (Fin)
 open import Data.Product using (Σ ; ∃-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
@@ -14,7 +15,7 @@ open import Data.Unit using (⊤; tt)
 open import Function using (_∘_)
 open import Relation.Nullary using (¬_)
 open import Relation.Unary using (Pred; _∈_;_⊆_)
-open import Relation.Binary.PropositionalEquality using (_≡_;_≢_; refl; cong; sym; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_;_≢_; refl; cong; cong₂; sym; subst; trans)
 
 open import Interval
 
@@ -89,7 +90,8 @@ data _⟶_ : Expr zero → Expr zero → Set where
     → Value s
     → (mab₁ : ALL MabValue s)
     → Value w
-    → app s w ⟶ foldALL (sub₁ w ∘ mabbody) mab₁
+    → app s w ⟶ mapE (sub₁ w) (foldALL mabbody mab₁)
+--    → app s w ⟶ foldALL (sub₁ w ∘ mabbody) mab₁
 
 data _⟶'_ : Expr zero → Expr zero → Set where
 
@@ -103,6 +105,31 @@ data _⟶'_ : Expr zero → Expr zero → Set where
 data _⟶*_ : Expr zero → Expr zero → Set where
   ⟶-refl : ∀ {e*} → e* ⟶* e*
   ⟶-step : ∀ {e₁* e₂* e₃*} → e₁* ⟶ e₂* → e₂* ⟶* e₃* → e₁* ⟶* e₃*
+
+data Monoidal-Red : ∀ {e₁ e₂} → e₁ ⟶ e₂ → Set where
+  mon-ε-unit-left : ∀ {e}
+    → Monoidal-Red (mon-ε-unit-left {e})
+
+  mon-ε-unit-right : ∀ {e}
+    → Monoidal-Red (mon-ε-unit-right {e})
+
+  mon-·-assoc : ∀ {e₁ e₂ e₃}
+    → Monoidal-Red (mon-·-assoc {e₁}{ e₂}{ e₃})
+
+  m-ξ-head : ∀ {e e′ s} {e⟶e′ : e ⟶ e′}
+    → Monoidal-Red e⟶e′
+    → Monoidal-Red (ξ-head {s = s} e⟶e′)
+
+  m-ξ-tail : ∀ {e s s′} (val-e : Value e) {s⟶s′ : s ⟶ s′}
+    → Monoidal-Red s⟶s′
+    → Monoidal-Red (ξ-tail val-e s⟶s′)
+  
+
+data Monoidal-Red* : ∀ {e₁ e₂} → e₁ ⟶* e₂ → Set where
+  ⟶-refl : ∀ {e} → Monoidal-Red* {e}{e} ⟶-refl
+  ⟶-step : ∀ {e₁ e₂ e₃} {e₁⟶e₂ : e₁ ⟶ e₂} {e₂⟶*e₃ : e₂ ⟶* e₃} → Monoidal-Red (e₁⟶e₂) → Monoidal-Red* (e₂⟶*e₃) → Monoidal-Red* (⟶-step e₁⟶e₂ e₂⟶*e₃)
+  
+
 
 ξ-* : ∀{s}{s′} → {f : Expr 0 → Expr 0} (tag : ∀ {e₁ e₂} → e₁ ⟶ e₂ → f e₁ ⟶ f e₂) → s ⟶* s′ → f s ⟶* f s′
 ξ-* tag ⟶-refl = ⟶-refl
@@ -127,6 +154,187 @@ data _⟶*_ : Expr zero → Expr zero → Set where
 ⟶*-trans : ∀ {e₁ e₂ e₃} → e₁ ⟶* e₂ → e₂ ⟶* e₃ → e₁ ⟶* e₃
 ⟶*-trans red₁ ⟶-refl = red₁
 ⟶*-trans red₁ (⟶-step x red₂) = ⟶*-trans (⟶*-snoc red₁ x) red₂
+
+m-ξ-head-* : ∀ {e e′ s} {red : e ⟶* e′} → Monoidal-Red* red → Monoidal-Red* (ξ-head-* red)
+m-ξ-head-* Monoidal-Red*.⟶-refl = Monoidal-Red*.⟶-refl
+m-ξ-head-* {s = s} (Monoidal-Red*.⟶-step {e₁⟶e₂ = step} mred mreds)
+  = Monoidal-Red*.⟶-step {e₁⟶e₂ = ξ-head {s = s} step} (m-ξ-head {s = s} mred) (m-ξ-head-* {s = s} mreds)
+
+m-ξ-tail-* : ∀ {e s s′} (val-e : Value e) {red : s ⟶* s′} → Monoidal-Red* red → Monoidal-Red* (ξ-tail-* val-e red)
+m-ξ-tail-* val-e Monoidal-Red*.⟶-refl = Monoidal-Red*.⟶-refl
+m-ξ-tail-* val-e (Monoidal-Red*.⟶-step {e₁⟶e₂ = step} mred mreds)
+  = Monoidal-Red*.⟶-step {e₁⟶e₂ = ξ-tail val-e step} (m-ξ-tail val-e mred) (m-ξ-tail-* val-e mreds)
+
+Monoidal-Red*-snoc : ∀ {e₁ e₂ e₃} {red : e₁ ⟶* e₂} {step : e₂ ⟶ e₃}
+  → Monoidal-Red* red → Monoidal-Red step → Monoidal-Red* (⟶*-snoc red step)
+Monoidal-Red*-snoc Monoidal-Red*.⟶-refl mstep = Monoidal-Red*.⟶-step mstep Monoidal-Red*.⟶-refl
+Monoidal-Red*-snoc (Monoidal-Red*.⟶-step mred mreds) mstep = Monoidal-Red*.⟶-step mred (Monoidal-Red*-snoc mreds mstep)
+
+Monoidal-Red*-trans : ∀ {e₁ e₂ e₃} {red₁ : e₁ ⟶* e₂} {red₂ : e₂ ⟶* e₃}
+  → Monoidal-Red* red₁ → Monoidal-Red* red₂ → Monoidal-Red* (⟶*-trans red₁ red₂)
+Monoidal-Red*-trans mreds₁ Monoidal-Red*.⟶-refl = mreds₁
+Monoidal-Red*-trans mreds₁ (Monoidal-Red*.⟶-step mred mreds₂) = Monoidal-Red*-trans (Monoidal-Red*-snoc mreds₁ mred) mreds₂
+
+Atom : Set
+Atom = Σ (Expr zero) (λ e → Value e × NonEmpty e × NonConcat e)
+
+atoms : ∀ {e} → ALL Value e → List Atom
+atoms Aε = []
+atoms (all₁ A· all₂) = atoms all₁ ++ atoms all₂
+atoms (AP {e = e} {e≢ε = e≢ε} {e≢· = e≢·} v) = (e , (v , e≢ε , (λ {x} {y} e≡x·y → e≢· e≡x·y))) ∷ []
+
+pack : List Atom → Expr zero
+pack [] = ε
+pack ((e , _) ∷ []) = e
+pack ((e , _) ∷ a₂ ∷ as) = e · pack (a₂ ∷ as)
+
+pack-nonempty : ∀ {a as} → NonEmpty (pack (a ∷ as))
+pack-nonempty {(e , (_ , e≢ε , _))} {[]} = e≢ε
+pack-nonempty {a} {a₂ ∷ as} ()
+
+pack-value : ∀ as → Value (pack as)
+pack-value [] = vε
+pack-value ((e , (v , _ , _)) ∷ []) = v
+pack-value ((e , (v , e≢ε , e≢·)) ∷ a₂ ∷ as)
+  = ((v v· pack-value (a₂ ∷ as))
+      {v≢ε = e≢ε}
+      {w≢ε = λ eqε → pack-nonempty {a = a₂} {as = as} eqε}
+      {v≢· = λ {x} {y} e≡x·y → e≢· e≡x·y})
+
+pack-append : ∀ xs ys → (pack xs · pack ys) ⟶* pack (xs ++ ys)
+pack-append [] ys = ⟶-step mon-ε-unit-left ⟶-refl
+pack-append (a ∷ []) [] = ⟶-step mon-ε-unit-right ⟶-refl
+pack-append (a ∷ []) (a₂ ∷ as) = ⟶-refl
+pack-append ((e , (v , e≢ε , e≢·)) ∷ a₂ ∷ as) ys
+  = ⟶-step mon-·-assoc (ξ-tail-* v (pack-append (a₂ ∷ as) ys))
+
+normalize-all : ∀ {e} (allv : ALL Value e) → e ⟶* pack (atoms allv)
+normalize-all Aε = ⟶-refl
+normalize-all (all₁ A· all₂)
+  = ⟶*-trans
+      (⟶*-trans
+        (ξ-head-* (normalize-all all₁))
+        (ξ-tail-* (pack-value (atoms all₁)) (normalize-all all₂)))
+      (pack-append (atoms all₁) (atoms all₂))
+normalize-all (AP {e = e} v) = ⟶-refl
+
+all-pres-mono : ∀ {e e′} {step : e ⟶ e′} → ALL Value e → Monoidal-Red step → ALL Value e′
+all-pres-mono (Aε A· all₂) Monoidal-Red.mon-ε-unit-left = all₂
+all-pres-mono (AP {e≢ε = e≢ε} x A· all₂) Monoidal-Red.mon-ε-unit-left = ⊥-elim (e≢ε refl)
+all-pres-mono (all₁ A· Aε) Monoidal-Red.mon-ε-unit-right = all₁
+all-pres-mono (all₁ A· AP {e≢ε = e≢ε} x) Monoidal-Red.mon-ε-unit-right = ⊥-elim (e≢ε refl)
+all-pres-mono ((all₁ A· all₂) A· all₃) Monoidal-Red.mon-·-assoc = all₁ A· (all₂ A· all₃)
+all-pres-mono (AP {e≢· = e≢·} x A· all₃) Monoidal-Red.mon-·-assoc = ⊥-elim (e≢· refl)
+all-pres-mono (all₁ A· all₂) (m-ξ-head mred) = all-pres-mono all₁ mred A· all₂
+all-pres-mono (all₁ A· all₂) (m-ξ-tail _ mred) = all₁ A· all-pres-mono all₂ mred
+all-pres-mono (AP {e≢· = e≢·} x) (m-ξ-head mred) = ⊥-elim (e≢· refl)
+all-pres-mono (AP {e≢· = e≢·} x) (m-ξ-tail _ mred) = ⊥-elim (e≢· refl)
+all-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-ε-unit-left = ⊥-elim (e≢· refl)
+all-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-ε-unit-right = ⊥-elim (e≢· refl)
+all-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-·-assoc = ⊥-elim (e≢· refl)
+
+all-pres-mono* : ∀ {e e′} {red : e ⟶* e′} → ALL Value e → Monoidal-Red* red → ALL Value e′
+all-pres-mono* all Monoidal-Red*.⟶-refl = all
+all-pres-mono* all (Monoidal-Red*.⟶-step mred mreds) = all-pres-mono* (all-pres-mono all mred) mreds
+
+atomsE : ∀ {e} → ALL Value e → List (Expr zero)
+atomsE Aε = []
+atomsE (all₁ A· all₂) = atomsE all₁ ++ atomsE all₂
+atomsE (AP {e = e} x) = e ∷ []
+
+atomsE-unique : ∀ {e} (all₁ all₂ : ALL Value e) → atomsE all₁ ≡ atomsE all₂
+atomsE-unique Aε Aε = refl
+atomsE-unique Aε (AP {e≢ε = e≢ε} x) = ⊥-elim (e≢ε refl)
+atomsE-unique (all₁ A· all₂) (all₁′ A· all₂′) = cong₂ _++_ (atomsE-unique all₁ all₁′) (atomsE-unique all₂ all₂′)
+atomsE-unique (all₁ A· all₂) (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+atomsE-unique (AP {e≢ε = e≢ε} x) Aε = ⊥-elim (e≢ε refl)
+atomsE-unique (AP {e≢· = e≢·} x) (all₁ A· all₂) = ⊥-elim (e≢· refl)
+atomsE-unique (AP {e = e} x) (AP {e = .e} x₁) = refl
+
+atomsE-map : ∀ {e} (all : ALL Value e) → map proj₁ (atoms all) ≡ atomsE all
+atomsE-map Aε = refl
+atomsE-map (all₁ A· all₂)
+  rewrite map-++ proj₁ (atoms all₁) (atoms all₂)
+        | atomsE-map all₁
+        | atomsE-map all₂
+  = refl
+atomsE-map (AP {e = e} x) = refl
+
+packE : List (Expr zero) → Expr zero
+packE [] = ε
+packE (e ∷ []) = e
+packE (e ∷ e₁ ∷ es) = e · packE (e₁ ∷ es)
+
+pack-map : ∀ as → pack as ≡ packE (map proj₁ as)
+pack-map [] = refl
+pack-map (a ∷ []) = refl
+pack-map (a ∷ a₁ ∷ as) rewrite pack-map (a₁ ∷ as) = refl
+
+pack-atomsE : ∀ {e} (all : ALL Value e) → pack (atoms all) ≡ packE (atomsE all)
+pack-atomsE all = trans (pack-map (atoms all)) (cong packE (atomsE-map all))
+
+atomsE-pres-mono : ∀ {e e′} {step : e ⟶ e′} (all : ALL Value e) (mred : Monoidal-Red step)
+  → atomsE all ≡ atomsE (all-pres-mono all mred)
+atomsE-pres-mono (Aε A· all₂) Monoidal-Red.mon-ε-unit-left
+  = atomsE-unique all₂ (all-pres-mono (Aε A· all₂) Monoidal-Red.mon-ε-unit-left)
+atomsE-pres-mono (AP {e≢ε = e≢ε} x A· all₂) Monoidal-Red.mon-ε-unit-left = ⊥-elim (e≢ε refl)
+atomsE-pres-mono (all₁ A· Aε) Monoidal-Red.mon-ε-unit-right
+  = trans
+      (++-identityʳ (atomsE all₁))
+      (atomsE-unique all₁ (all-pres-mono (all₁ A· Aε) Monoidal-Red.mon-ε-unit-right))
+atomsE-pres-mono (all₁ A· AP {e≢ε = e≢ε} x) Monoidal-Red.mon-ε-unit-right = ⊥-elim (e≢ε refl)
+atomsE-pres-mono ((all₁ A· all₂) A· all₃) Monoidal-Red.mon-·-assoc
+  = trans
+      (++-assoc (atomsE all₁) (atomsE all₂) (atomsE all₃))
+      (atomsE-unique (all₁ A· (all₂ A· all₃)) (all-pres-mono ((all₁ A· all₂) A· all₃) Monoidal-Red.mon-·-assoc))
+atomsE-pres-mono (AP {e≢· = e≢·} x A· all₃) Monoidal-Red.mon-·-assoc = ⊥-elim (e≢· refl)
+atomsE-pres-mono (all₁ A· all₂) (m-ξ-head mred)
+  = trans
+      (cong (λ xs → xs ++ atomsE all₂) (atomsE-pres-mono all₁ mred))
+      (atomsE-unique
+        (all-pres-mono all₁ mred A· all₂)
+        (all-pres-mono (all₁ A· all₂) (m-ξ-head mred)))
+atomsE-pres-mono (all₁ A· all₂) (m-ξ-tail val-e mred)
+  = trans
+      (cong (λ xs → atomsE all₁ ++ xs) (atomsE-pres-mono all₂ mred))
+      (atomsE-unique
+        (all₁ A· all-pres-mono all₂ mred)
+        (all-pres-mono (all₁ A· all₂) (m-ξ-tail val-e mred)))
+atomsE-pres-mono (AP {e≢· = e≢·} x) (m-ξ-head mred) = ⊥-elim (e≢· refl)
+atomsE-pres-mono (AP {e≢· = e≢·} x) (m-ξ-tail _ mred) = ⊥-elim (e≢· refl)
+atomsE-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-ε-unit-left = ⊥-elim (e≢· refl)
+atomsE-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-ε-unit-right = ⊥-elim (e≢· refl)
+atomsE-pres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-·-assoc = ⊥-elim (e≢· refl)
+
+atomsE-pres-mono* : ∀ {e e′} {red : e ⟶* e′} (all : ALL Value e) (mreds : Monoidal-Red* red)
+  → atomsE all ≡ atomsE (all-pres-mono* all mreds)
+atomsE-pres-mono* all Monoidal-Red*.⟶-refl = refl
+atomsE-pres-mono* all (Monoidal-Red*.⟶-step mred mreds)
+  = trans
+      (atomsE-pres-mono all mred)
+      (atomsE-pres-mono* (all-pres-mono all mred) mreds)
+
+monoidal-confluence-ALL
+  : ∀ {v v₁ v₂}
+  → ALL Value v
+  → {red₁ : v ⟶* v₁} {red₂ : v ⟶* v₂}
+  → Monoidal-Red* red₁
+  → Monoidal-Red* red₂
+  → ∃[ w ] v₁ ⟶* w × v₂ ⟶* w
+monoidal-confluence-ALL {v = v} {v₁ = v₁} {v₂ = v₂} allv mred₁ mred₂ =
+  let allv₁ = all-pres-mono* allv mred₁
+      allv₂ = all-pres-mono* allv mred₂
+      red₁  = normalize-all allv₁
+      red₂  = normalize-all allv₂
+      eq₁   = atomsE-pres-mono* allv mred₁
+      eq₂   = atomsE-pres-mono* allv mred₂
+      eqE   = trans (sym eq₁) eq₂
+      red₁′ = subst (λ t → v₁ ⟶* t) (pack-atomsE allv₁) red₁
+      red₂′ = subst (λ t → v₂ ⟶* t) (pack-atomsE allv₂) red₂
+      red₂″ = subst (λ t → v₂ ⟶* t) (sym (cong packE eqE)) red₂′
+  in packE (atomsE allv₁)
+   , red₁′
+   , red₂″
 
 -- reduction properties
 
@@ -202,6 +410,14 @@ value-· {e₂ = e₂} (mab {ημ = ημ} {e* = e*}) v₂ with v₂
 ... | cst = (mab ημ e* · e₂) , ((mab v· cst) {v≢ε = λ()} {w≢ε = λ()} {v≢· = λ {e₁} {e₂} ()} , ⟶-refl)
 ... | abs = (mab ημ e* · e₂) , ((mab v· abs) {v≢ε = λ()} {w≢ε = λ()} {v≢· = λ {e₁} {e₂} ()} , ⟶-refl)
 ... | mab = (mab ημ e* · e₂) , ((mab v· mab) {v≢ε = λ()} {w≢ε = λ()} {v≢· = λ {e₁} {e₂} ()} , ⟶-refl)
+
+value→ALL : ∀ {e} → Value e → ALL Value e
+value→ALL vε = Aε
+value→ALL ((vv v· vw) {v≢ε = v≢ε} {v≢· = v≢·})
+  = AP {e≢ε = v≢ε} {e≢· = v≢·} vv A· value→ALL vw
+value→ALL cst = AP-cst cst
+value→ALL abs = AP-abs abs
+value→ALL mab = AP-mab mab
 
 -- typing contexts
 
@@ -1176,6 +1392,51 @@ value-no-step ((vv v· vw) {v≢ε = v≢ε} {w≢ε = w≢ε} {v≢· = v≢·}
 value-irred : ∀ {e} → Value e → irred e
 value-irred v e′ e⟶e′ = value-no-step v e⟶e′
 
+all-value-step-mono : ∀ {e e′} → ALL Value e → (s : e ⟶ e′) → Monoidal-Red s
+all-value-step-mono Aε ()
+all-value-step-mono (all₁ A· all₂) (ξ-head e⟶e′) = m-ξ-head (all-value-step-mono all₁ e⟶e′)
+all-value-step-mono (all₁ A· all₂) (ξ-tail val-e s⟶s′) = m-ξ-tail val-e (all-value-step-mono all₂ s⟶s′)
+all-value-step-mono (Aε A· all₂) mon-ε-unit-left = Monoidal-Red.mon-ε-unit-left
+all-value-step-mono (AP {e≢ε = e≢ε} x A· all₂) mon-ε-unit-left = ⊥-elim (e≢ε refl)
+all-value-step-mono (all₁ A· Aε) mon-ε-unit-right = Monoidal-Red.mon-ε-unit-right
+all-value-step-mono (all₁ A· AP {e≢ε = e≢ε} x) mon-ε-unit-right = ⊥-elim (e≢ε refl)
+all-value-step-mono ((all₁ A· all₂) A· all₃) mon-·-assoc = Monoidal-Red.mon-·-assoc
+all-value-step-mono (AP {e≢· = e≢·} x A· all₃) mon-·-assoc = ⊥-elim (e≢· refl)
+all-value-step-mono (AP v) st = ⊥-elim (value-no-step v st)
+
+all-value-red-mono : ∀ {e e′} (all : ALL Value e) (red : e ⟶* e′) → Monoidal-Red* red
+all-value-red-mono all ⟶-refl = Monoidal-Red*.⟶-refl
+all-value-red-mono all (⟶-step st red)
+  = Monoidal-Red*.⟶-step mstep (all-value-red-mono (all-pres-mono all mstep) red)
+  where
+    mstep : Monoidal-Red st
+    mstep = all-value-step-mono all st
+
+monoidal-local-confluence-value
+  : ∀ {v v₁ v₂}
+  → Value v
+  → {red₁ : v ⟶ v₁} {red₂ : v ⟶ v₂}
+  → Monoidal-Red red₁
+  → Monoidal-Red red₂
+  → ∃[ w ] v₁ ⟶* w × v₂ ⟶* w
+monoidal-local-confluence-value vv {red₁ = red₁} mred₁ mred₂
+  = ⊥-elim (value-no-step vv red₁)
+
+value-no-step* : ∀ {v w} → Value v → v ⟶* w → v ≡ w
+value-no-step* vv ⟶-refl = refl
+value-no-step* vv (⟶-step v⟶v′ red) = ⊥-elim (value-no-step vv v⟶v′)
+
+monoidal-confluence-value
+  : ∀ {v v₁ v₂}
+  → Value v
+  → {red₁ : v ⟶* v₁} {red₂ : v ⟶* v₂}
+  → Monoidal-Red* red₁
+  → Monoidal-Red* red₂
+  → ∃[ w ] v₁ ⟶* w × v₂ ⟶* w
+monoidal-confluence-value {v = v} vv {red₁ = red₁} {red₂ = red₂} mred₁ mred₂
+  with value-no-step* vv red₁ | value-no-step* vv red₂
+... | refl | refl = v , ⟶-refl , ⟶-refl
+
 monoidal-nf : Expr zero → Set
 monoidal-nf ε = ⊤
 monoidal-nf (e · e₁) = e ≢ ε × e₁ ≢ ε × (∀ {x y} → e ≢ (x · y)) × monoidal-nf e₁
@@ -1288,9 +1549,196 @@ value-monoidal-nf mab = tt
 ¬1≤0 : ¬ (1 ≤ℕ 0)
 ¬1≤0 ()
 
-𝓔-decompose :  ∀ {e₁ e₂}{η μ} → (e₁ · e₂) ∈ 𝓔⟦ ⟨ η , μ ⟩ ⟧
-  → ∃[ η₁ ] ∃[ η₂ ] e₁ ∈ 𝓔⟦ ⟨ η₁ , μ ⟩ ⟧ × e₂ ∈ 𝓔⟦ ⟨ η₂ , μ ⟩ ⟧ × ADD η₁ η₂ ≡ η
-𝓔-decompose = {!!}
+·-⟶-decompose-value : ∀ {e₁ e₂ w} → Value w → (e₁ · e₂) ⟶* w
+  → ∃[ w₁ ] ∃[ w₂ ] Value w₁ × Value w₂ × e₁ ⟶* w₁ × e₂ ⟶* w₂
+    ×  Σ ((w₁ · w₂) ⟶* w) Monoidal-Red*
+{-# TERMINATING #-}
+·-⟶-decompose-value {e₁ = e₁} {e₂ = e₂} vw ⟶-refl
+  with vw
+... | ((v₁ v· v₂) {v≢ε = _} {w≢ε = _} {v≢· = _})
+  = e₁ , e₂ , v₁ , v₂ , ⟶-refl , ⟶-refl , (⟶-refl , Monoidal-Red*.⟶-refl)
+·-⟶-decompose-value vw (⟶-step (ξ-head e₁⟶e₁′) red)
+  with ·-⟶-decompose-value vw red
+... | w₁ , w₂ , vw₁ , vw₂ , e₁′⟶*w₁ , e₂⟶*w₂ , w₁·w₂⟶*w , mon-red
+  = w₁ , w₂ , vw₁ , vw₂ , ⟶-step e₁⟶e₁′ e₁′⟶*w₁ , e₂⟶*w₂ , (w₁·w₂⟶*w , mon-red)
+·-⟶-decompose-value vw (⟶-step (ξ-tail val-e₁ e₂⟶e₂′) red)
+  with ·-⟶-decompose-value vw red
+... | w₁ , w₂ , vw₁ , vw₂ , e₁⟶*w₁ , e₂′⟶*w₂ , w₁·w₂⟶*w , mon-red
+  = w₁ , w₂ , vw₁ , vw₂ , e₁⟶*w₁ , ⟶-step e₂⟶e₂′ e₂′⟶*w₂ , (w₁·w₂⟶*w , mon-red)
+·-⟶-decompose-value {e₂ = e₂} {w = w} vw (⟶-step mon-ε-unit-left red)
+  = ε , w , vε , vw
+  , ⟶-refl
+  , red
+  , (⟶-step mon-ε-unit-left ⟶-refl
+    , Monoidal-Red*.⟶-step Monoidal-Red.mon-ε-unit-left Monoidal-Red*.⟶-refl)
+·-⟶-decompose-value {e₁ = e₁} {w = w} vw (⟶-step mon-ε-unit-right red)
+  = w , ε , vw , vε
+  , red
+  , ⟶-refl
+  , (⟶-step mon-ε-unit-right ⟶-refl
+    , Monoidal-Red*.⟶-step Monoidal-Red.mon-ε-unit-right Monoidal-Red*.⟶-refl)
+·-⟶-decompose-value {e₁ = e₁ · e₂} {e₂ = e₃} vw (⟶-step mon-·-assoc red)
+  with ·-⟶-decompose-value vw red
+... | w₁ , w₂₃ , vw₁ , vw₂₃ , e₁⟶*w₁ , e₂·e₃⟶*w₂₃ , w₁·w₂₃⟶*w , mon₁
+  with ·-⟶-decompose-value vw₂₃ e₂·e₃⟶*w₂₃
+... | w₂ , w₃ , vw₂ , vw₃ , e₂⟶*w₂ , e₃⟶*w₃ , w₂·w₃⟶*w₂₃ , mon₂
+  with value-· vw₁ vw₂
+... | w₁₂ , vw₁₂ , w₁·w₂⟶*w₁₂
+  with monoidal-confluence-ALL
+         (((value→ALL vw₁) A· (value→ALL vw₂)) A· (value→ALL vw₃))
+         (Monoidal-Red*-trans
+           (Monoidal-Red*.⟶-step Monoidal-Red.mon-·-assoc Monoidal-Red*.⟶-refl)
+           (Monoidal-Red*-trans (m-ξ-tail-* vw₁ mon₂) mon₁))
+         (all-value-red-mono
+           (((value→ALL vw₁) A· (value→ALL vw₂)) A· (value→ALL vw₃))
+           (ξ-head-* w₁·w₂⟶*w₁₂))
+... | w′ , w⟶*w′ , w₁₂·w₃⟶*w′
+  with value-no-step* vw w⟶*w′
+... | refl
+  = w₁₂ , w₃ , vw₁₂ , vw₃
+  , (⟶*-trans (⟶*-trans (ξ-head-* e₁⟶*w₁) (ξ-tail-* vw₁ e₂⟶*w₂)) w₁·w₂⟶*w₁₂)
+  , e₃⟶*w₃
+  , (w₁₂·w₃⟶*w′
+    , all-value-red-mono ((value→ALL vw₁₂) A· (value→ALL vw₃)) w₁₂·w₃⟶*w′)
+
+·-⟶-decompose : ∀ {e₁ e₂ w} → Value w → (e₁ · e₂) ⟶* w
+  → ∃[ w₁ ] ∃[ w₂ ] ALL Value w₁ × ALL Value w₂ × e₁ ⟶* w₁ × e₂ ⟶* w₂
+    ×  Σ ((w₁ · w₂) ⟶* w) Monoidal-Red*
+·-⟶-decompose vw red
+  with ·-⟶-decompose-value vw red
+... | w₁ , w₂ , vw₁ , vw₂ , e₁⟶*w₁ , e₂⟶*w₂ , w₁·w₂⟶*w , mon-red
+  = w₁ , w₂ , value→ALL vw₁ , value→ALL vw₂ , e₁⟶*w₁ , e₂⟶*w₂ , (w₁·w₂⟶*w , mon-red)
+
+numOfLen : ℕ → Num
+numOfLen zero = `-
+numOfLen (suc zero) = `!
+numOfLen (suc (suc _)) = `+
+
+numOfLen-sound : ∀ n → n ∈∈ 𝓝⟦ numOfLen n ⟧
+numOfLen-sound zero = z≤n , z≤n
+numOfLen-sound (suc zero) = s≤s z≤n , s≤s z≤n
+numOfLen-sound (suc (suc n)) = s≤s z≤n
+
+numOfLen-sub : ∀ {n η} → n ∈∈ 𝓝⟦ η ⟧ → numOfLen n <:₀ η
+numOfLen-sub {zero} {`- } n∈ = <:₀-refl
+numOfLen-sub {zero} {`!} (() , k≤1)
+numOfLen-sub {zero} {`?} n∈ = <:₀--?
+numOfLen-sub {zero} {`*} n∈ = <:₀--*
+numOfLen-sub {zero} {`+} ()
+numOfLen-sub {suc zero} {`- } (0≤n , ())
+numOfLen-sub {suc zero} {`!} n∈ = <:₀-refl
+numOfLen-sub {suc zero} {`?} n∈ = <:₀-!?
+numOfLen-sub {suc zero} {`*} n∈ = <:₀-!*
+numOfLen-sub {suc zero} {`+} n∈ = <:₀-!+
+numOfLen-sub {suc (suc n)} {`- } (0≤n , ())
+numOfLen-sub {suc (suc n)} {`!} (1≤n , s≤s ())
+numOfLen-sub {suc (suc n)} {`?} (0≤n , s≤s ())
+numOfLen-sub {suc (suc n)} {`*} n∈ = <:₀-+*
+numOfLen-sub {suc (suc n)} {`+} n∈ = <:₀-refl
+
+numOfLen-add-super : ∀ n₁ n₂ → ADD (numOfLen n₁) (numOfLen n₂) <:₀ numOfLen (n₁ +ℕ n₂)
+numOfLen-add-super zero zero = <:₀-refl
+numOfLen-add-super zero (suc zero) = <:₀-refl
+numOfLen-add-super zero (suc (suc n₂)) = <:₀-refl
+numOfLen-add-super (suc zero) zero = <:₀-refl
+numOfLen-add-super (suc zero) (suc zero) = <:₀-refl
+numOfLen-add-super (suc zero) (suc (suc n₂)) = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) zero = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) (suc zero) = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) (suc (suc n₂)) = <:₀-refl
+
+all-unpres-mono
+  : ∀ {P} {e e′} {step : e ⟶ e′}
+  → ALL P e′
+  → Monoidal-Red step
+  → ALL P e
+all-unpres-mono all′ Monoidal-Red.mon-ε-unit-left = Aε A· all′
+all-unpres-mono all′ Monoidal-Red.mon-ε-unit-right = all′ A· Aε
+all-unpres-mono (AP {e≢· = e≢·} x) Monoidal-Red.mon-·-assoc = ⊥-elim (e≢· refl)
+all-unpres-mono (all₁ A· all₂₃) Monoidal-Red.mon-·-assoc with all₂₃
+... | (all₂ A· all₃) = (all₁ A· all₂) A· all₃
+... | (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+all-unpres-mono all′ (m-ξ-head mred) with all′
+... | (all₁ A· all₂) = all-unpres-mono all₁ mred A· all₂
+... | (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+all-unpres-mono all′ (m-ξ-tail val-e mred) with all′
+... | (all₁ A· all₂) = all₁ A· all-unpres-mono all₂ mred
+... | (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
+
+all-unpres-mono*
+  : ∀ {P} {e e′} {red : e ⟶* e′}
+  → ALL P e′
+  → Monoidal-Red* red
+  → ALL P e
+all-unpres-mono* all′ Monoidal-Red*.⟶-refl = all′
+all-unpres-mono* all′ (Monoidal-Red*.⟶-step mred mreds)
+  = all-unpres-mono (all-unpres-mono* all′ mreds) mred
+
+monoidal-length-pres : ∀ {e e′} {step : e ⟶ e′} → Monoidal-Red step → lengthE e ≡ lengthE e′
+monoidal-length-pres Monoidal-Red.mon-ε-unit-left = refl
+monoidal-length-pres {e′ = e′} Monoidal-Red.mon-ε-unit-right rewrite +-identityʳ (lengthE e′) = refl
+monoidal-length-pres {e = ((e₁ · e₂) · e₃)} Monoidal-Red.mon-·-assoc
+  rewrite +-assoc (lengthE e₁) (lengthE e₂) (lengthE e₃) = refl
+monoidal-length-pres (m-ξ-head mred) rewrite monoidal-length-pres mred = refl
+monoidal-length-pres (m-ξ-tail _ mred) rewrite monoidal-length-pres mred = refl
+
+monoidal-length-pres* : ∀ {e e′} {red : e ⟶* e′} → Monoidal-Red* red → lengthE e ≡ lengthE e′
+monoidal-length-pres* Monoidal-Red*.⟶-refl = refl
+monoidal-length-pres* (Monoidal-Red*.⟶-step mred mreds)
+  = trans (monoidal-length-pres mred) (monoidal-length-pres* mreds)
+
+atomic-𝓥-value
+  : ∀ {e}{μ}
+  → ALL 𝓥⟦ μ ⟧ e
+  → e ≢ ε
+  → (∀ {x y} → e ≢ (x · y))
+  → Value e
+atomic-𝓥-value Aε e≢ε e≢· = ⊥-elim (e≢ε refl)
+atomic-𝓥-value (_ A· _) e≢ε e≢· = ⊥-elim (e≢· refl)
+atomic-𝓥-value (AP e∈𝓥) e≢ε e≢· = value-𝓥 e∈𝓥
+
+all-𝓥-nf→value : ∀ {e}{μ} → ALL 𝓥⟦ μ ⟧ e → monoidal-nf e → Value e
+all-𝓥-nf→value Aε nf = vε
+all-𝓥-nf→value (AP e∈𝓥) nf = value-𝓥 e∈𝓥
+all-𝓥-nf→value {e = e₁ · e₂} (all₁ A· all₂) (e₁≢ε , e₂≢ε , e₁≢· , nf₂)
+  = ((atomic-𝓥-value all₁ e₁≢ε e₁≢·) v· all-𝓥-nf→value all₂ nf₂)
+      {v≢ε = e₁≢ε}
+      {w≢ε = e₂≢ε}
+      {v≢· = e₁≢·}
+
+
+𝓔-decompose : ∀ {e₁ e₂}{η μ} → (e₁ · e₂) ∈ 𝓔⟦ ⟨ η , μ ⟩ ⟧
+  → ∃[ η₁ ] ∃[ η₂ ] e₁ ∈ 𝓔⟦ ⟨ η₁ , μ ⟩ ⟧ × e₂ ∈ 𝓔⟦ ⟨ η₂ , μ ⟩ ⟧ × ADD η₁ η₂ <:₀ η
+𝓔-decompose {η = η} {μ = μ} (w , (allμ , mono-w , len-w∈) , e₁·e₂⟶*w)
+  with ·-⟶-decompose-value (all-𝓥-nf→value allμ mono-w) e₁·e₂⟶*w
+... | w₁ , w₂ , vw₁ , vw₂ , e₁⟶*w₁ , e₂⟶*w₂ , w₁·w₂⟶*w , mon-red
+  = η₁ , η₂
+  , (w₁ , (allμ₁ , value-monoidal-nf vw₁ , numOfLen-sound (lengthE w₁)) , e₁⟶*w₁)
+  , (w₂ , (allμ₂ , value-monoidal-nf vw₂ , numOfLen-sound (lengthE w₂)) , e₂⟶*w₂)
+  , <:₀-trans
+      (numOfLen-add-super (lengthE w₁) (lengthE w₂))
+      (numOfLen-sub len-sum∈η)
+  where
+    η₁ : Num
+    η₁ = numOfLen (lengthE w₁)
+
+    η₂ : Num
+    η₂ = numOfLen (lengthE w₂)
+
+    allμ₁·allμ₂ : ALL 𝓥⟦ μ ⟧ (w₁ · w₂)
+    allμ₁·allμ₂ = all-unpres-mono* allμ mon-red
+
+    allμ₁ : ALL 𝓥⟦ μ ⟧ w₁
+    allμ₁ = ALL-proj₁ allμ₁·allμ₂
+
+    allμ₂ : ALL 𝓥⟦ μ ⟧ w₂
+    allμ₂ = ALL-proj₂ allμ₁·allμ₂
+
+    len-sum∈η : (lengthE w₁ +ℕ lengthE w₂) ∈∈ 𝓝⟦ η ⟧
+    len-sum∈η
+      = subst (λ n → n ∈∈ 𝓝⟦ η ⟧)
+          (sym (monoidal-length-pres* mon-red))
+          len-w∈
 
 value-𝓦 : ∀ {e}{ημ} → e ∈ 𝓦⟦ ημ ⟧ → Value e
 value-𝓦 {ημ = ⟨ η , μ ⟩} (all∈𝓥 , nf , len∈) = value-all-nf all∈𝓥 nf
@@ -1436,8 +1884,11 @@ fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢
   using value-s ← value-𝓦 {ημ = ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩} 𝓦-s
   using value-w ← value-𝓦 𝓦-w
   using mab-s ← mapALL (λ { (ημ₀ , b , refl , _ , _) → v-mab ημ₀ b }) all∈μ₁⇒η₂μ₂
-  using reduce-to-redex ← ⟶*-snoc (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w)) (βₙ value-s mab-s value-w)  
-  = foldALL (sub₁ w ∘ mabbody) mab-s , {!!} , reduce-to-redex
+  using reduce-to-redex ← (⟶*-trans (ξ-app₁-* sub-σ-s₁⟶*s) (ξ-app₂-* value-s sub-σ-s₂⟶*w))
+  using redex ← (s · w)
+  using mbodies , mab-from-s ← foldALL-MONOIDAL mabbody mab-s
+  using reduce-redex ←  ⟶*-snoc reduce-to-redex  (βₙ value-s mab-s value-w)
+  = foldALL (sub₁ w ∘ mabbody) mab-s , {!!} , {!!}
 fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
   with fundamental ⊢e σ σ∈
 ... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
