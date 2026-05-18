@@ -4,6 +4,7 @@ open import Level using (Level) renaming (zero to lzero)
 open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; zero; suc) renaming (_+_ to _+ℕ_)
 open import Data.Fin using (Fin)
+open import Data.Product using (_×_)
 open import Relation.Unary using (Pred)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong₂)
 open import Function using (_∘_)
@@ -37,8 +38,14 @@ lengthE (abs x e) = 1
 lengthE (mab x e) = 1
 lengthE (app e e₁) = 1
 
-NonEmpty : Expr zero → Set
+NonEmpty : ∀ {n} → Expr n → Set
 NonEmpty e = e ≡ ε → ⊥
+
+NonConcat : ∀ {n} → Expr n → Set
+NonConcat e = ∀ {e₁ e₂} → e ≡ (e₁ · e₂) → ⊥
+
+Atomic : ∀ {n} → Expr n → Set
+Atomic e = NonEmpty e × NonConcat e
 
 data ALL (P : Expr zero → Set) : Expr zero → Set where
   Aε : ALL P ε
