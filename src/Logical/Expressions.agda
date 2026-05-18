@@ -4,7 +4,7 @@ open import Level using (Level) renaming (zero to lzero)
 open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; zero; suc) renaming (_+_ to _+ℕ_)
 open import Data.Fin using (Fin)
-open import Data.Product using (_×_)
+open import Data.Product using (_×_; Σ; _,_)
 open import Relation.Unary using (Pred)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong₂)
 open import Function using (_∘_)
@@ -79,3 +79,18 @@ mapE-foldALL : ∀ {m n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (g : �
 mapE-foldALL g f f-map Aε = refl
 mapE-foldALL g f f-map (ap A· ap₁) = cong₂ _·_ (mapE-foldALL g f f-map ap) (mapE-foldALL g f f-map ap₁)
 mapE-foldALL g f f-map (AP ap) = f-map
+
+data MONOIDAL {n} : Expr n → Set where
+  Mε : MONOIDAL ε
+  _M·_ : ∀ {e₁}{e₂} → MONOIDAL e₁ → MONOIDAL e₂ → MONOIDAL (e₁ · e₂)
+  MA : ∀ e → MONOIDAL e
+
+foldALL-MONOIDAL : ∀ {n} {e : Expr zero} {P : Pred (Expr zero) lzero} → (∀ {x} → P x → Expr n) → ALL P e → Σ (Expr n) MONOIDAL
+foldALL-MONOIDAL f Aε = _ , Mε
+foldALL-MONOIDAL f (all A· all₁)
+  with foldALL-MONOIDAL f all
+... | e , ih
+  with foldALL-MONOIDAL f all₁
+... | e₁ , ih₁ = (e · e₁) , (ih M· ih₁)
+foldALL-MONOIDAL f (AP x) = _ , MA (f x)
+
