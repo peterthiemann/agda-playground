@@ -5,6 +5,7 @@ open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; zero; suc) renaming (_+_ to _+ℕ_)
 open import Data.Fin using (Fin)
 open import Data.Product using (_×_; Σ; _,_)
+open import Data.Unit using (⊤)
 open import Relation.Unary using (Pred)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong₂)
 open import Function using (_∘_)
@@ -46,6 +47,14 @@ NonConcat e = ∀ {e₁ e₂} → e ≡ (e₁ · e₂) → ⊥
 
 Atomic : ∀ {n} → Expr n → Set
 Atomic e = NonEmpty e × NonConcat e
+
+monoidal-nf : Expr zero → Set
+monoidal-nf ε = ⊤
+monoidal-nf (e · e₁) = NonEmpty e × NonEmpty e₁ × NonConcat e × monoidal-nf e₁
+monoidal-nf (cst x) = ⊤
+monoidal-nf (abs x e) = ⊤
+monoidal-nf (mab x e) = ⊤
+monoidal-nf (app e e₁) = ⊤
 
 data ALL (P : Expr zero → Set) : Expr zero → Set where
   Aε : ALL P ε

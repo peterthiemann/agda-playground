@@ -711,3 +711,42 @@ ADD-i-j {`*} {`*} j∈ k∈ = z≤n
 ADD-i-j {`*} {`+} {j} {k} j∈ k∈ = ≤-trans k∈ (m≤n+m k j)
 
 ADD-i-j {`+} {η₂} {j} {k} j∈ k∈ = ≤-trans j∈ (m≤m+n j k)
+
+numOfLen : ℕ → Num
+numOfLen zero = `-
+numOfLen (suc zero) = `!
+numOfLen (suc (suc _)) = `+
+
+numOfLen-sound : ∀ n → n ∈∈ 𝓝⟦ numOfLen n ⟧
+numOfLen-sound zero = z≤n , z≤n
+numOfLen-sound (suc zero) = s≤s z≤n , s≤s z≤n
+numOfLen-sound (suc (suc n)) = s≤s z≤n
+
+numOfLen-sub : ∀ {n η} → n ∈∈ 𝓝⟦ η ⟧ → numOfLen n <:₀ η
+numOfLen-sub {zero} {`- } n∈ = <:₀-refl
+numOfLen-sub {zero} {`!} (() , k≤1)
+numOfLen-sub {zero} {`?} n∈ = <:₀--?
+numOfLen-sub {zero} {`*} n∈ = <:₀--*
+numOfLen-sub {zero} {`+} ()
+numOfLen-sub {suc zero} {`- } (0≤n , ())
+numOfLen-sub {suc zero} {`!} n∈ = <:₀-refl
+numOfLen-sub {suc zero} {`?} n∈ = <:₀-!?
+numOfLen-sub {suc zero} {`*} n∈ = <:₀-!*
+numOfLen-sub {suc zero} {`+} n∈ = <:₀-!+
+numOfLen-sub {suc (suc n)} {`- } (0≤n , ())
+numOfLen-sub {suc (suc n)} {`!} (1≤n , s≤s ())
+numOfLen-sub {suc (suc n)} {`?} (0≤n , s≤s ())
+numOfLen-sub {suc (suc n)} {`*} n∈ = <:₀-+*
+numOfLen-sub {suc (suc n)} {`+} n∈ = <:₀-refl
+
+numOfLen-add-super : ∀ n₁ n₂ → ADD (numOfLen n₁) (numOfLen n₂) <:₀ numOfLen (n₁ +ℕ n₂)
+numOfLen-add-super zero zero = <:₀-refl
+numOfLen-add-super zero (suc zero) = <:₀-refl
+numOfLen-add-super zero (suc (suc n₂)) = <:₀-refl
+numOfLen-add-super (suc zero) zero = <:₀-refl
+numOfLen-add-super (suc zero) (suc zero) = <:₀-refl
+numOfLen-add-super (suc zero) (suc (suc n₂)) = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) zero = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) (suc zero) = <:₀-refl
+numOfLen-add-super (suc (suc n₁)) (suc (suc n₂)) = <:₀-refl
+
