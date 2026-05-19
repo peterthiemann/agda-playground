@@ -1464,8 +1464,6 @@ monoidal-nf (app e e₁) = ⊤
 
 𝓖⟦_⟧ : Ctx n → Sub n zero → Set
 𝓖⟦ Γ ⟧ σ = ∀ x → σ x ∈ 𝓦⟦ lookup  x Γ ⟧
--- 𝓖⟦ ∅ ⟧ σ = ⊤
--- 𝓖⟦ ημ ▻ Γ ⟧ σ = (∃[ w ] σ Fin.zero ≡ w × w ∈ 𝓦⟦ ημ ⟧) × (σ ∘ Fin.suc) ∈ 𝓖⟦ Γ ⟧
 
 ext-𝓖 : ∀ {Γ : Ctx n}{σ : Sub n zero} {e : Expr zero} {ημ} → σ ∈ 𝓖⟦ Γ ⟧ → e ∈ 𝓦⟦ ημ ⟧ → extSub σ e ∈ 𝓖⟦ ημ ▻ Γ ⟧
 ext-𝓖 σ∈𝓖 e∈𝓦 Fin.zero = e∈𝓦
@@ -1520,24 +1518,6 @@ all-monoidal-value {w = cst k} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = abs x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = mab x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = app w w₁} (AP x) mono-w len-w = ⊥-elim (¬𝓥-app x)
-
--- irred-monoidal : ∀ {e}{μ} → irred e → ALL 𝓥⟦ μ ⟧ e → monoidal-nf e
--- irred-monoidal {ε} irr all-v = tt
--- irred-monoidal {ε · e₁} irr all-v = ⊥-elim (irr e₁ mon-ε-unit-left)
--- irred-monoidal {(e · e₂) · e₁} irr all-v = ⊥-elim (irr (e · (e₂ · e₁)) mon-·-assoc)
--- irred-monoidal {cst x · ε} irr all-v = ⊥-elim (irr (cst x) mon-ε-unit-right)
--- irred-monoidal {cst x · (e₁ · e₂)} irr all-v = (λ ()) , ((λ ()) , (λ ()) , irred-monoidal {!!} {!!})
--- irred-monoidal {cst x · cst x₁} irr all-v = (λ ()) , ((λ ()) , ((λ ()) , tt))
--- irred-monoidal {cst x · abs x₁ e₁} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
--- irred-monoidal {cst x · mab x₁ e₁} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
--- irred-monoidal {cst x · app e₁ e₂} irr all-v = (λ ()) , (λ ()) , (λ ()) , tt
--- irred-monoidal {abs x e · e₁} irr all-v = {!!}
--- irred-monoidal {mab x e · e₁} irr all-v = {!!}
--- irred-monoidal {app e e₂ · e₁} irr all-v = {!!}
--- irred-monoidal {cst x} irr all-v = tt
--- irred-monoidal {abs x e} irr all-v = tt
--- irred-monoidal {mab x e} irr all-v = tt
--- irred-monoidal {app e e₁} irr all-v = tt
 
 
 
@@ -1864,25 +1844,48 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 
 <:ₙ-subset-𝓔 (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) (e , w∈𝓦 , e⟶*w) = e , <:ₙ-subset (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) w∈𝓦 , e⟶*w
 
+-- compatibility lemmas / one for each typing rule
 
--- fundamental lemma
+compatible-var : ∀ {x}
+  → Γ ⊨ var x ⦂ lookup x Γ
+compatible-var {x = x} σ σ∈ = σ x , σ∈ x , ⟶-refl
 
-fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
-fundamental (t-var {x = x}) σ σ∈ = σ x , σ∈ x , ⟶-refl
-fundamental (t-cst {k = k}) σ σ∈ = cst k , (AP-cst (k , refl) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
-fundamental (t-abs {μ = μ} {s = e} {ημ = ημ} ⊢e) σ σ∈
-  = sub σ (abs μ e) , ((AP-abs (μ , (sub (liftSub σ) e , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) (sub-ext-lift {σ = σ} {v = v} {e = e}) (fundamental ⊢e (extSub σ v) (ext-𝓖 σ∈ ((AP-𝓥 v∈𝓥) , value-monoidal-nf (value-𝓥 v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , tt , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
-fundamental (t-mab {ημ = ημ} {s} {ημ′} ⊢e) σ σ∈
-  = sub σ (mab ημ s) , ((AP-mab (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ (sub-ext-lift {σ = σ} {v = w} {e = s}) (fundamental ⊢e (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
-fundamental (t-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η₃} ⊢e ⊢e₁ m m₁) σ σ∈
-  with fundamental ⊢e σ σ∈
+compatible-cst : ∀ {k}
+  → Γ ⊨ cst k ⦂ ⟨ `! , □ ⟩
+compatible-cst {k = k} σ σ∈ = cst k , (AP-cst (k , refl) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
+
+compatible-abs : ∀ {μ}{s}{ημ}
+  → (⟨ `! , μ ⟩ ▻ Γ) ⊨ s ⦂ ημ
+  → Γ ⊨ abs μ s  ⦂ ⟨ `! , (μ ⇒ ημ) ⟩
+compatible-abs {μ = μ} {s = s} {ημ = ημ} sem-s σ σ∈
+  = sub σ (abs μ s) , ((AP-abs (μ , (sub (liftSub σ) s , refl , <:ₜ-refl , λ v v∈𝓥 → subst (𝓔⟦ ημ ⟧) (sub-ext-lift {σ = σ} {v = v} {e = s}) (sem-s (extSub σ v) (ext-𝓖 σ∈ ((AP-𝓥 v∈𝓥) , value-monoidal-nf (value-𝓥 v∈𝓥) , ≤-reflexive (sym (length-𝓥 v∈𝓥)) , ≤-reflexive (length-𝓥 v∈𝓥))))))) , tt , (s≤s z≤n , s≤s z≤n)) , ⟶-refl
+
+compatible-mab : ∀ {ημ}{s}{ημ′}
+  → (ημ ▻ Γ) ⊨ s ⦂ ημ′
+  → Γ ⊨ mab ημ s ⦂ ⟨ `! , (ημ ⇛ ημ′) ⟩
+compatible-mab {ημ = ημ} {s} {ημ′} sem-s σ σ∈
+  = sub σ (mab ημ s) , ((AP-mab (ημ , ((sub (liftSub σ) s) , (refl , (<:ₙ-refl , (λ w w∈𝓦 → subst 𝓔⟦ ημ′ ⟧ (sub-ext-lift {σ = σ} {v = w} {e = s}) (sem-s (extSub σ w) (ext-𝓖 σ∈ w∈𝓦)))))))) , tt , s≤s z≤n , s≤s z≤n) , ⟶-refl
+
+compatible-app-s : ∀ {s₁}{s₂}{η₁ μ₁ η₂ μ₂ η₃ η η′}
+  → Γ ⊨ s₁ ⦂ ⟨ η₁ , μ₁ ⇒ ⟨ η₂ , μ₂ ⟩ ⟩
+  → Γ ⊨ s₂ ⦂ ⟨ η₃ , μ₁ ⟩
+  → MUL η₁ η₂ η′ → MUL η′ η₃ η
+  → Γ ⊨ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
+compatible-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η₃} sem-s₁ sem-s₂ m m₁ σ σ∈
+  with sem-s₁ σ σ∈
 ... | s , (all∈μ₁⇒η₂μ₂ , _ , len∈η₁) , sub-σ-s₁⟶*s
-  with fundamental ⊢e₁ σ σ∈
+  with sem-s₂ σ σ∈
 ... | w , (all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w  = {! !}
-fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢e₁ m) σ σ∈
-  with fundamental ⊢e σ σ∈
+
+compatible-app-p : ∀ {s₁}{s₂}{η₁ ημ η₂ μ₂ η}
+  → Γ ⊨ s₁ ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
+  → Γ ⊨ s₂ ⦂ ημ
+  → MUL η₁ η₂ η
+  → Γ ⊨ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
+compatible-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} sem-s₁ sem-s₂ m σ σ∈
+  with sem-s₁ σ σ∈
 ... | s , 𝓦-s@((all∈μ₁⇒η₂μ₂) , mono-s , len∈η₁) , sub-σ-s₁⟶*s
-  with fundamental ⊢e₁ σ σ∈
+  with sem-s₂ σ σ∈
 ... | w , 𝓦-w@(all∈μ₁ , _ , len∈η₃) , sub-σ-s₂⟶*w
   using value-s ← value-𝓦 {ημ = ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩} 𝓦-s
   using value-w ← value-𝓦 𝓦-w
@@ -1974,18 +1977,48 @@ fundamental (t-app-p {s₁ = s₁}{s₂}{η₁}{ημ}{η₂}{μ₂}{η} ⊢e ⊢
 
         len₂∈η₁ : lengthE s₂ ∈∈ 𝓝⟦ η₁′ ⟧
         len₂∈η₁ = <:₀-subset +<:η₁ (mono-nonempty-len-plus mono₂ s₂≢ε)
-fundamental (t-sub ⊢e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂)) σ σ∈
-  with fundamental ⊢e σ σ∈
-... | w , (allv-w , nf , len-w-∈) , subσe⟶*w = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
-fundamental t-empty σ σ∈ = ε , (Aε , tt , z≤n , z≤n) , ⟶-refl
-fundamental (t-head {e₁ = e₁} {e₂} ⊢e ⊢e₁ x) σ σ∈
+
+compatible-sub : ∀ {e : Expr n}{ημ₁ ημ₂}
+  → Γ ⊨ e ⦂ ημ₁
+  → ημ₁ <:ₙ ημ₂
+  → Γ ⊨ e ⦂ ημ₂
+compatible-sub sem-e (<:ₙ-comb η₁<:η₂ μ₁<:μ₂) σ σ∈
+  with sem-e σ σ∈
+... | w , (allv-w , nf , len-w-∈) , subσe⟶*w
+  = w , (mapALL (<:ₜ-subset μ₁<:μ₂) allv-w , nf , <:₀-subset η₁<:η₂ len-w-∈) , subσe⟶*w
+
+compatible-empty : ∀ {μ}
+  → Γ ⊨ ε ⦂ ⟨ `- , μ ⟩
+compatible-empty σ σ∈ = ε , (Aε , tt , z≤n , z≤n) , ⟶-refl
+
+compatible-head : ∀ {e₁}{e₂}{η₁ η₂ η μ}
+  → Γ ⊨ e₁ ⦂ ⟨ η₁ , μ ⟩
+  → Γ ⊨ e₂ ⦂ ⟨ η₂ , μ ⟩
+  → η ≡ ADD η₁ η₂
+  → Γ ⊨ (e₁ · e₂) ⦂ ⟨ η , μ ⟩
+compatible-head sem-e₁ sem-e₂ x σ σ∈
   rewrite x
-  with fundamental ⊢e σ σ∈
+  with sem-e₁ σ σ∈
 ... | w₁ , w₁∈𝓦 , sub-σ-e₁⟶*w₁
-  with fundamental ⊢e₁ σ σ∈
+  with sem-e₂ σ σ∈
 ... | w₂ , w₂∈𝓦 , sub-σ-e₂⟶*w₂
   with compatible-· w₁∈𝓦 w₂∈𝓦
 ... | w , w∈𝓦 , w₁·w₂⟶*w
   = w , w∈𝓦 , ⟶*-trans (⟶*-trans (ξ-head-* sub-σ-e₁⟶*w₁) (ξ-tail-* (value-𝓦 w₁∈𝓦) sub-σ-e₂⟶*w₂)) w₁·w₂⟶*w
 
 
+-- fundamental lemma
+
+fundamental : ∀ {e}{ημ} → Γ ⊢ e ⦂ ημ → Γ ⊨ e ⦂ ημ
+fundamental (t-var {x = x}) = compatible-var {x = x}
+fundamental (t-cst {k = k}) = compatible-cst {k = k}
+fundamental (t-abs {μ = μ} {s = s} {ημ = ημ} ⊢e) = compatible-abs {μ = μ} {s = s} {ημ = ημ} (fundamental ⊢e)
+fundamental (t-mab {ημ = ημ} {s} {ημ′} ⊢e) = compatible-mab {ημ = ημ} {s} {ημ′} (fundamental ⊢e)
+fundamental (t-app-s {s₁ = s₁} {s₂ = s₂} {η₁ = η₁} {μ₁ = μ₁} {η₂ = η₂} {μ₂ = μ₂} {η₃ = η₃} {η = η} {η′ = η′} ⊢e ⊢e₁ m m₁)
+  = compatible-app-s {s₁ = s₁} {s₂ = s₂} {η₁ = η₁} {μ₁ = μ₁} {η₂ = η₂} {μ₂ = μ₂} {η₃ = η₃} {η = η} {η′ = η′} (fundamental ⊢e) (fundamental ⊢e₁) m m₁
+fundamental (t-app-p {s₁ = s₁} {s₂ = s₂} {η₁ = η₁} {ημ = ημ} {η₂ = η₂} {μ₂ = μ₂} {η = η} ⊢e ⊢e₁ m)
+  = compatible-app-p {s₁ = s₁} {s₂ = s₂} {η₁ = η₁} {ημ = ημ} {η₂ = η₂} {μ₂ = μ₂} {η = η} (fundamental ⊢e) (fundamental ⊢e₁) m
+fundamental (t-sub {e = e} {ημ₁ = ημ₁} {ημ₂ = ημ₂} ⊢e ημ<:) = compatible-sub {e = e} {ημ₁ = ημ₁} {ημ₂ = ημ₂} (fundamental ⊢e) ημ<:
+fundamental t-empty = compatible-empty
+fundamental (t-head {e₁ = e₁} {e₂} {η₁} {η₂} {η} {μ} ⊢e ⊢e₁ x)
+  = compatible-head {e₁ = e₁} {e₂} {η₁} {η₂} {η} {μ} (fundamental ⊢e) (fundamental ⊢e₁) x
