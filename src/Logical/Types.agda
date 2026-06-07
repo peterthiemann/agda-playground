@@ -31,6 +31,8 @@ data _<:ₜ_ : Ty → Ty → Set where
 data _<:ₙ_ where
   <:ₙ-comb : ∀ {μ₁ μ₂} {η₁ η₂} → η₁ <:₀ η₂ → μ₁ <:ₜ μ₂ → ⟨ η₁ , μ₁ ⟩ <:ₙ ⟨ η₂ , μ₂ ⟩
 
+-- subtyping is reflexive
+
 <:ₜ-refl : ∀ {μ} → μ <:ₜ μ
 <:ₙ-refl : ∀ {ημ} → ημ <:ₙ ημ
 
@@ -40,6 +42,8 @@ data _<:ₙ_ where
 <:ₜ-refl {ημ ⇛ ημ₁} = <:ₜ-⇛ <:ₙ-refl <:ₙ-refl
 
 <:ₙ-refl {⟨ num , ty ⟩} = <:ₙ-comb <:₀-refl <:ₜ-refl
+
+-- subtyping is transitive
 
 <:ₜ-trans : ∀ {μ₁ μ₂ μ₃} → μ₁ <:ₜ μ₂ → μ₂ <:ₜ μ₃ → μ₁ <:ₜ μ₃
 <:ₙ-trans : ∀ {ημ₁ ημ₂ ημ₃} → ημ₁ <:ₙ ημ₂ → ημ₂ <:ₙ ημ₃ → ημ₁ <:ₙ ημ₃
