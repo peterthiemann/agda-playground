@@ -1,4 +1,4 @@
-module SimplyExprQuotient where
+module SimplyNumbered where
 
 open import Level using (Level) renaming (zero to lzero)
 
