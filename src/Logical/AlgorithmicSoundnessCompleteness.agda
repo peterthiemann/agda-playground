@@ -29,35 +29,50 @@ ADD-monotone-both : ∀ {η₁ η₂ η₁′ η₂′}
 ADD-monotone-both η₁<:η₁′ η₂<:η₂′ =
   <:₀-trans (ADD-monotone-left η₁<:η₁′) (ADD-monotone-right η₂<:η₂′)
 
-sound : ∀ {e : Expr n} {ημ}
-  → Γ ⊢ᵃ e ⦂ ημ
-  → Γ ⊢ e ⦂ ημ
-sound a-var = t-var
-sound a-cst = t-cst
-sound (a-abs ⊢s) = t-abs (sound ⊢s)
-sound (a-mab ⊢s) = t-mab (sound ⊢s)
-sound (a-app-s ⊢s₁ ηf<:η₁ μf<:⇒ ⊢s₂ ηa<:η₃ μa<:μ₁ m₁ m₂) =
-  t-app-s
-    (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ μf<:⇒))
-    (t-sub (sound ⊢s₂) (<:ₙ-comb ηa<:η₃ μa<:μ₁))
-    m₁
-    m₂
-sound (a-app-p ⊢s₁ ηf<:η₁ μf<:⇛ ⊢s₂ ηarg<:ημ m) =
-  t-app-p
-    (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ μf<:⇛))
-    (t-sub (sound ⊢s₂) ηarg<:ημ)
-    m
-sound a-empty = t-empty
-sound (a-head ⊢e₁ ⊢e₂ μ₁<:μ μ₂<:μ) =
-  t-head
-    (t-sub (sound ⊢e₁) (<:ₙ-comb <:₀-refl μ₁<:μ))
-    (t-sub (sound ⊢e₂) (<:ₙ-comb <:₀-refl μ₂<:μ))
-    refl
+EXT0-monotone : ∀ {η₁ η₂}
+  → η₁ <:₀ η₂
+  → EXT0 η₁ <:₀ EXT0 η₂
+EXT0-monotone <:₀-refl = <:₀-refl
+EXT0-monotone <:₀--? = <:₀--?
+EXT0-monotone <:₀--* = <:₀--*
+EXT0-monotone <:₀-!? = <:₀-refl
+EXT0-monotone <:₀-!* = <:₀-?*
+EXT0-monotone <:₀-!+ = <:₀-?*
+EXT0-monotone <:₀-?* = <:₀-?*
+EXT0-monotone <:₀-+* = <:₀-refl
 
-check-sound : ∀ {e : Expr n} {ημ}
-  → Γ ⊢ᶜ e ⦂ ημ
-  → Γ ⊢ e ⦂ ημ
-check-sound (_ , ⊢e , ημ₀<:ημ) = t-sub (sound ⊢e) ημ₀<:ημ
+mutual
+  sound : ∀ {e : Expr n} {ημ}
+    → Γ ⊢ᵃ e ⦂ ημ
+    → Γ ⊢ e ⦂ ημ
+  sound a-var = t-var
+  sound a-cst = t-cst
+  sound (a-abs ⊢s) = t-abs (sound ⊢s)
+  sound (a-mab ⊢s) = t-mab (sound ⊢s)
+  sound (a-app-s ⊢s₁ ⊢s₂ ηa<:η₃ μa<:μ₁ m₁ m₂) =
+    t-app-s
+      (check-sound ⊢s₁)
+      (t-sub (sound ⊢s₂) (<:ₙ-comb ηa<:η₃ μa<:μ₁))
+      m₁
+      m₂
+  sound (a-app-p ⊢s₁ ⊢s₂ ηarg<:ημ m) =
+    t-app-p
+      (check-sound ⊢s₁)
+      (t-sub (sound ⊢s₂) ηarg<:ημ)
+      m
+  sound a-empty = t-empty
+  sound (a-head ⊢e₁ ⊢e₂ μ₁<:μ μ₂<:μ) =
+    t-head
+      (t-sub (sound ⊢e₁) (<:ₙ-comb <:₀-refl μ₁<:μ))
+      (t-sub (sound ⊢e₂) (<:ₙ-comb <:₀-refl μ₂<:μ))
+      refl
+  sound (a-mtc ⊢v val-v ⊢e ⊢s) =
+    t-mtc (check-sound ⊢v) val-v (check-sound ⊢e) (sound ⊢s)
+
+  check-sound : ∀ {e : Expr n} {ημ}
+    → Γ ⊢ᶜ e ⦂ ημ
+    → Γ ⊢ e ⦂ ημ
+  check-sound (_ , ⊢e , ημ₀<:ημ) = t-sub (sound ⊢e) ημ₀<:ημ
 
 complete : ∀ {e : Expr n} {ημ}
   → Γ ⊢ e ⦂ ημ
@@ -78,17 +93,17 @@ complete (t-mab {ημ = ημ} ⊢s)
   , <:ₙ-comb <:₀-refl (<:ₜ-⇛ <:ₙ-refl ημ₀<:ημ′)
 complete (t-app-s {η₁ = η₁} {μ₁ = μ₁} {η₂ = η₂} {μ₂ = μ₂} {η₃ = η₃} {η = η} {η′ = η′} ⊢s₁ ⊢s₂ m₁ m₂)
   with complete ⊢s₁ | complete ⊢s₂
-... | ⟨ ηf , μf ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ μf<:⇒
+... | ⊢s₁ᶜ
     | ⟨ ηa , μa ⟩ , ⊢s₂ᵃ , <:ₙ-comb ηa<:η₃ μa<:μ₁ =
   ⟨ η , μ₂ ⟩
-  , a-app-s ⊢s₁ᵃ ηf<:η₁ μf<:⇒ ⊢s₂ᵃ ηa<:η₃ μa<:μ₁ m₁ m₂
+  , a-app-s ⊢s₁ᶜ ⊢s₂ᵃ ηa<:η₃ μa<:μ₁ m₁ m₂
   , <:ₙ-refl
 complete (t-app-p {η₁ = η₁} {ημ = ημ} {η₂ = η₂} {μ₂ = μ₂} {η = η} ⊢s₁ ⊢s₂ m)
   with complete ⊢s₁ | complete ⊢s₂
-... | ⟨ ηf , μf ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ μf<:⇛
+... | ⊢s₁ᶜ
     | ηarg , ⊢s₂ᵃ , ηarg<:ημ =
   ⟨ η , μ₂ ⟩
-  , a-app-p ⊢s₁ᵃ ηf<:η₁ μf<:⇛ ⊢s₂ᵃ ηarg<:ημ m
+  , a-app-p ⊢s₁ᶜ ⊢s₂ᵃ ηarg<:ημ m
   , <:ₙ-refl
 complete (t-sub ⊢e ημ₁<:ημ₂)
   with complete ⊢e
@@ -105,3 +120,9 @@ complete (t-head {η₁ = η₁} {η₂ = η₂} {μ = μ} ⊢e₁ ⊢e₂ refl)
   ⟨ ADD η₁ᵃ η₂ᵃ , μ ⟩
   , a-head ⊢e₁ᵃ ⊢e₂ᵃ μ₁ᵃ<:μ μ₂ᵃ<:μ
   , <:ₙ-comb (ADD-monotone-both η₁ᵃ<:η₁ η₂ᵃ<:η₂) <:ₜ-refl
+complete (t-mtc {v = v} {e = e} {s = s} {ημ = ημ} {η = η} {μ = μ} ⊢v val-v ⊢e ⊢s)
+  with complete ⊢v | complete ⊢e | complete ⊢s
+... | ⊢vᶜ | ⊢eᶜ | ⟨ ηᵃ , μᵃ ⟩ , ⊢sᵃ , <:ₙ-comb ηᵃ<:η μᵃ<:μ =
+  ⟨ EXT0 ηᵃ , μᵃ ⟩
+  , a-mtc ⊢vᶜ val-v ⊢eᶜ ⊢sᵃ
+  , <:ₙ-comb (EXT0-monotone ηᵃ<:η) μᵃ<:μ

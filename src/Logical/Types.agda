@@ -1,6 +1,8 @@
 module Types where
 
 open import Numeri
+open import Relation.Nullary using (Dec; yes; no)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 -- types
 
@@ -18,6 +20,40 @@ data Ty where
   □ : Ty
   _⇒_ : Ty → NTy → Ty
   _⇛_ : NTy → NTy → Ty
+
+mutual
+  _≟Ty_ : (μ μ′ : Ty) → Dec (μ ≡ μ′)
+  `⊥ ≟Ty `⊥ = yes refl
+  `⊥ ≟Ty □ = no λ ()
+  `⊥ ≟Ty (_ ⇒ _) = no λ ()
+  `⊥ ≟Ty (_ ⇛ _) = no λ ()
+  □ ≟Ty `⊥ = no λ ()
+  □ ≟Ty □ = yes refl
+  □ ≟Ty (_ ⇒ _) = no λ ()
+  □ ≟Ty (_ ⇛ _) = no λ ()
+  (_ ⇒ _) ≟Ty `⊥ = no λ ()
+  (_ ⇒ _) ≟Ty □ = no λ ()
+  (μ₁ ⇒ ημ₁) ≟Ty (μ₂ ⇒ ημ₂) with μ₁ ≟Ty μ₂
+  ... | no μ₁≢μ₂ = no λ { refl → μ₁≢μ₂ refl }
+  ... | yes refl with ημ₁ ≟NTy ημ₂
+  ... | no ημ₁≢ημ₂ = no λ { refl → ημ₁≢ημ₂ refl }
+  ... | yes refl = yes refl
+  (_ ⇒ _) ≟Ty (_ ⇛ _) = no λ ()
+  (_ ⇛ _) ≟Ty `⊥ = no λ ()
+  (_ ⇛ _) ≟Ty □ = no λ ()
+  (_ ⇛ _) ≟Ty (_ ⇒ _) = no λ ()
+  (ημ₁ ⇛ ημ₁′) ≟Ty (ημ₂ ⇛ ημ₂′) with ημ₁ ≟NTy ημ₂
+  ... | no ημ₁≢ημ₂ = no λ { refl → ημ₁≢ημ₂ refl }
+  ... | yes refl with ημ₁′ ≟NTy ημ₂′
+  ... | no ημ₁′≢ημ₂′ = no λ { refl → ημ₁′≢ημ₂′ refl }
+  ... | yes refl = yes refl
+
+  _≟NTy_ : (ημ ημ′ : NTy) → Dec (ημ ≡ ημ′)
+  ⟨ η , μ ⟩ ≟NTy ⟨ η′ , μ′ ⟩ with η ≟Num η′
+  ... | no η≢η′ = no λ { refl → η≢η′ refl }
+  ... | yes refl with μ ≟Ty μ′
+  ... | no μ≢μ′ = no λ { refl → μ≢μ′ refl }
+  ... | yes refl = yes refl
 
 -- subtyping
 

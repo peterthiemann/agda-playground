@@ -8,7 +8,8 @@ open import Data.Unit using (⊤)
 open import Numeri
 open import Types
 open import Expressions
-open import SimplyNumbered using (Ctx; lookup; _▻_; _⊢_⦂_)
+open import Values using (Value)
+open import SimplyNumbered using (Ctx; ∅; lookup; _▻_; _⊢_⦂_)
 
 variable
   n : ℕ
@@ -39,55 +40,59 @@ ADD⊥ (↑₀ η₁) (↑₀ η₂) = ↑₀ (ADD η₁ η₂)
 -- domains, common sequence element types) carry local subtype premises.
 
 infix 2 _⊢ᵃ_⦂_
-data _⊢ᵃ_⦂_ {n : ℕ} : Ctx n → Expr n → NTy → Set where
+infix 2 _⊢ᶜ_⦂_
+mutual
+  data _⊢ᵃ_⦂_ {n : ℕ} : Ctx n → Expr n → NTy → Set where
 
-  a-var : ∀ {x}
-    → Γ ⊢ᵃ var x ⦂ lookup x Γ
+    a-var : ∀ {x}
+      → Γ ⊢ᵃ var x ⦂ lookup x Γ
 
-  a-cst : ∀ {k}
-    → Γ ⊢ᵃ cst k ⦂ ⟨ `! , □ ⟩
+    a-cst : ∀ {k}
+      → Γ ⊢ᵃ cst k ⦂ ⟨ `! , □ ⟩
 
-  a-abs : ∀ {μ s ημ}
-    → (⟨ `! , μ ⟩ ▻ Γ) ⊢ᵃ s ⦂ ημ
-    → Γ ⊢ᵃ abs μ s ⦂ ⟨ `! , μ ⇒ ημ ⟩
+    a-abs : ∀ {μ s ημ}
+      → (⟨ `! , μ ⟩ ▻ Γ) ⊢ᵃ s ⦂ ημ
+      → Γ ⊢ᵃ abs μ s ⦂ ⟨ `! , μ ⇒ ημ ⟩
 
-  a-mab : ∀ {ημ s ημ′}
-    → (ημ ▻ Γ) ⊢ᵃ s ⦂ ημ′
-    → Γ ⊢ᵃ mab ημ s ⦂ ⟨ `! , ημ ⇛ ημ′ ⟩
+    a-mab : ∀ {ημ s ημ′}
+      → (ημ ▻ Γ) ⊢ᵃ s ⦂ ημ′
+      → Γ ⊢ᵃ mab ημ s ⦂ ⟨ `! , ημ ⇛ ημ′ ⟩
 
-  a-app-s : ∀ {s₁ s₂ ηf μf η₁ μ₁ η₂ μ₂ ηa μa η₃ η η′}
-    → Γ ⊢ᵃ s₁ ⦂ ⟨ ηf , μf ⟩
-    → ηf <:₀ η₁
-    → μf <:ₜ (μ₁ ⇒ ⟨ η₂ , μ₂ ⟩)
-    → Γ ⊢ᵃ s₂ ⦂ ⟨ ηa , μa ⟩
-    → ηa <:₀ η₃
-    → μa <:ₜ μ₁
-    → MUL η₁ η₂ η′
-    → MUL η′ η₃ η
-    → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
+    a-app-s : ∀ {s₁ s₂ η₁ μ₁ η₂ μ₂ ηa μa η₃ η η′}
+      → Γ ⊢ᶜ s₁ ⦂ ⟨ η₁ , μ₁ ⇒ ⟨ η₂ , μ₂ ⟩ ⟩
+      → Γ ⊢ᵃ s₂ ⦂ ⟨ ηa , μa ⟩
+      → ηa <:₀ η₃
+      → μa <:ₜ μ₁
+      → MUL η₁ η₂ η′
+      → MUL η′ η₃ η
+      → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
 
-  a-app-p : ∀ {s₁ s₂ ηf μf η₁ ημ ηarg η₂ μ₂ η}
-    → Γ ⊢ᵃ s₁ ⦂ ⟨ ηf , μf ⟩
-    → ηf <:₀ η₁
-    → μf <:ₜ (ημ ⇛ ⟨ η₂ , μ₂ ⟩)
-    → Γ ⊢ᵃ s₂ ⦂ ηarg
-    → ηarg <:ₙ ημ
-    → MUL η₁ η₂ η
-    → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
+    a-app-p : ∀ {s₁ s₂ η₁ ημ ηarg η₂ μ₂ η}
+      → Γ ⊢ᶜ s₁ ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
+      → Γ ⊢ᵃ s₂ ⦂ ηarg
+      → ηarg <:ₙ ημ
+      → MUL η₁ η₂ η
+      → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
 
-  a-empty :
-    Γ ⊢ᵃ ε ⦂ ⟨ `- , `⊥ ⟩
+    a-empty :
+      Γ ⊢ᵃ ε ⦂ ⟨ `- , `⊥ ⟩
 
-  a-head : ∀ {e₁ e₂ η₁ μ₁ η₂ μ₂ μ}
-    → Γ ⊢ᵃ e₁ ⦂ ⟨ η₁ , μ₁ ⟩
-    → Γ ⊢ᵃ e₂ ⦂ ⟨ η₂ , μ₂ ⟩
-    → μ₁ <:ₜ μ
-    → μ₂ <:ₜ μ
-    → Γ ⊢ᵃ (e₁ · e₂) ⦂ ⟨ ADD η₁ η₂ , μ ⟩
+    a-head : ∀ {e₁ e₂ η₁ μ₁ η₂ μ₂ μ}
+      → Γ ⊢ᵃ e₁ ⦂ ⟨ η₁ , μ₁ ⟩
+      → Γ ⊢ᵃ e₂ ⦂ ⟨ η₂ , μ₂ ⟩
+      → μ₁ <:ₜ μ
+      → μ₂ <:ₜ μ
+      → Γ ⊢ᵃ (e₁ · e₂) ⦂ ⟨ ADD η₁ η₂ , μ ⟩
+
+    a-mtc : ∀ {v e s ημ η μ}
+      → ∅ ⊢ᶜ v ⦂ ημ
+      → Value v
+      → Γ ⊢ᶜ e ⦂ ημ
+      → Γ ⊢ᵃ s ⦂ ⟨ η , μ ⟩
+      → Γ ⊢ᵃ mtc v e s ⦂ ⟨ EXT0 η , μ ⟩
 
 -- Checking against a declarative type is synthesis plus one explicit
 -- subtype comparison.  This is the form used by completeness.
 
-infix 2 _⊢ᶜ_⦂_
-_⊢ᶜ_⦂_ : Ctx n → Expr n → NTy → Set
-Γ ⊢ᶜ e ⦂ ημ = Σ NTy λ ημ₀ → (Γ ⊢ᵃ e ⦂ ημ₀) × (ημ₀ <:ₙ ημ)
+  _⊢ᶜ_⦂_ : Ctx n → Expr n → NTy → Set
+  Γ ⊢ᶜ e ⦂ ημ = Σ NTy λ ημ₀ → (Γ ⊢ᵃ e ⦂ ημ₀) × (ημ₀ <:ₙ ημ)

@@ -13,6 +13,7 @@ open import Data.List.Relation.Unary.All using (All; []; _∷_)
 open import Data.List.Relation.Unary.Any  using (here; there)
 open import Data.List.Membership.Propositional renaming (_∈_ to _∈′_)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Unary using (Pred; _∈_)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; cong; sym)
 open import Function using (_∘_)
@@ -24,6 +25,33 @@ open import Interval
 
 data Num : Set where
   `- `! `? `* `+ : Num
+
+_≟Num_ : (η η′ : Num) → Dec (η ≡ η′)
+`- ≟Num `- = yes refl
+`- ≟Num `! = no λ ()
+`- ≟Num `? = no λ ()
+`- ≟Num `* = no λ ()
+`- ≟Num `+ = no λ ()
+`! ≟Num `- = no λ ()
+`! ≟Num `! = yes refl
+`! ≟Num `? = no λ ()
+`! ≟Num `* = no λ ()
+`! ≟Num `+ = no λ ()
+`? ≟Num `- = no λ ()
+`? ≟Num `! = no λ ()
+`? ≟Num `? = yes refl
+`? ≟Num `* = no λ ()
+`? ≟Num `+ = no λ ()
+`* ≟Num `- = no λ ()
+`* ≟Num `! = no λ ()
+`* ≟Num `? = no λ ()
+`* ≟Num `* = yes refl
+`* ≟Num `+ = no λ ()
+`+ ≟Num `- = no λ ()
+`+ ≟Num `! = no λ ()
+`+ ≟Num `? = no λ ()
+`+ ≟Num `* = no λ ()
+`+ ≟Num `+ = yes refl
 
 data _<:₀_ : Num → Num → Set where
   <:₀-refl : ∀ {num} → num <:₀ num
@@ -292,6 +320,27 @@ ADD-DEC {`*} {`?} η≢ k∈ = z≤n
 ADD-DEC {`*} {`*} η≢ k∈ = z≤n
 ADD-DEC {`*} {`+} η≢ k∈ = s≤s z≤n
 ADD-DEC {`+} {η₂} η≢ k∈ = s≤s z≤n
+
+EXT0 : Num → Num
+EXT0 `- = `-
+EXT0 `! = `?
+EXT0 `? = `?
+EXT0 `* = `*
+EXT0 `+ = `*
+
+EXT0-sound-0 : ∀ η → 0 ∈∈ 𝓝⟦ EXT0 η ⟧
+EXT0-sound-0 `- = z≤n , z≤n
+EXT0-sound-0 `! = z≤n , z≤n
+EXT0-sound-0 `? = z≤n , z≤n
+EXT0-sound-0 `* = z≤n
+EXT0-sound-0 `+ = z≤n
+
+EXT0-sound-1 : ∀ η {k} → k ∈∈ 𝓝⟦ η ⟧ → k ∈∈ 𝓝⟦ EXT0 η ⟧
+EXT0-sound-1 `- k∈ = k∈
+EXT0-sound-1 `! k∈ = z≤n , k∈ .proj₂
+EXT0-sound-1 `? k∈ = k∈
+EXT0-sound-1 `* k∈ = k∈
+EXT0-sound-1 `+ k∈ = z≤n
 
 data MUL : Num → Num → Num → Set where
   m0-left : ∀ {η} → MUL `- η `-
@@ -749,4 +798,3 @@ numOfLen-add-super (suc zero) (suc (suc n₂)) = <:₀-refl
 numOfLen-add-super (suc (suc n₁)) zero = <:₀-refl
 numOfLen-add-super (suc (suc n₁)) (suc zero) = <:₀-refl
 numOfLen-add-super (suc (suc n₁)) (suc (suc n₂)) = <:₀-refl
-

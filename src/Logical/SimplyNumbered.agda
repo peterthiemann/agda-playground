@@ -13,7 +13,7 @@ open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
 
 open import Function using (_∘_)
-open import Relation.Nullary using (¬_)
+open import Relation.Nullary using (¬_; yes; no)
 open import Relation.Unary using (Pred; _∈_;_⊆_)
 open import Relation.Binary.PropositionalEquality using (_≡_;_≢_; refl; cong; cong₂; sym; subst; trans)
 
@@ -80,6 +80,23 @@ data _⟶_ : Expr zero → Expr zero → Set where
     → Value w
     → app s w ⟶ mapE (sub₁ w) (foldALL mabbody mab₁)
 
+  ξ-match : ∀ {s₁ s₂ s₂′ s}
+    → Value s₁
+    → s₂ ⟶ s₂′
+    → mtc s₁ s₂ s ⟶ mtc s₁ s₂′ s
+
+  β-match-eq : ∀ {w₁ w₂ s}
+    → Value w₁
+    → Value w₂
+    → w₁ ≡ w₂
+    → mtc w₁ w₂ s ⟶ s
+
+  β-match-neq : ∀ {w₁ w₂ s}
+    → Value w₁
+    → Value w₂
+    → w₁ ≢ w₂
+    → mtc w₁ w₂ s ⟶ ε
+
 -- multi-step reduction
 
 data _⟶*_ : Expr zero → Expr zero → Set where
@@ -129,6 +146,9 @@ data Monoidal-Red* : ∀ {e₁ e₂} → e₁ ⟶* e₂ → Set where
 
 ξ-app₂-* : ∀ {e}{s}{s′} → Value e → s ⟶* s′ → (app e s) ⟶* (app e s′)
 ξ-app₂-* val-e = ξ-* (ξ-app₂ val-e)
+
+ξ-match-* : ∀ {v}{e}{e′}{s} → Value v → e ⟶* e′ → mtc v e s ⟶* mtc v e′ s
+ξ-match-* val-v = ξ-* (ξ-match val-v)
 
 ⟶*-snoc : ∀ {e₁ e₂ e₃} → e₁ ⟶* e₂ → e₂ ⟶ e₃ → e₁ ⟶* e₃
 ⟶*-snoc ⟶-refl step = ⟶-step step ⟶-refl
@@ -461,6 +481,27 @@ data _⊢_⦂_  {n} : Ctx n → Expr n → NTy → Set where
     → η ≡ ADD η₁ η₂
     → Γ ⊢ (e₁ · e₂) ⦂ ⟨ η , μ ⟩
 
+  t-mtc : ∀ {v}{e}{s}{ημ η μ}
+    → ∅ ⊢ v ⦂ ημ
+    → Value v
+    → Γ ⊢ e ⦂ ημ
+    → Γ ⊢ s ⦂ ⟨ η , μ ⟩
+    → Γ ⊢ mtc v e s ⦂ ⟨ EXT0 η , μ ⟩
+
+EXT0-super : ∀ {η} → η <:₀ EXT0 η
+EXT0-super {`- } = <:₀-refl
+EXT0-super {`!} = <:₀-!?
+EXT0-super {`?} = <:₀-refl
+EXT0-super {`*} = <:₀-refl
+EXT0-super {`+} = <:₀-+*
+
+EXT0-empty : ∀ {η} → `- <:₀ EXT0 η
+EXT0-empty {`- } = <:₀-refl
+EXT0-empty {`!} = <:₀--?
+EXT0-empty {`?} = <:₀--?
+EXT0-empty {`*} = <:₀--*
+EXT0-empty {`+} = <:₀--*
+
 -- typed renaming and substitution
 
 infix 2 _⊢ₛ_∶_
@@ -492,6 +533,7 @@ ren-pres (t-app-p ⊢s₁ ⊢s₂ x) ρ⊢ = t-app-p (ren-pres ⊢s₁ ρ⊢) (r
 ren-pres (t-sub ⊢e ημ<:) ρ⊢ = t-sub (ren-pres ⊢e ρ⊢) ημ<:
 ren-pres t-empty ρ⊢ = t-empty
 ren-pres (t-head ⊢e₁ ⊢e₂ refl) ρ⊢ = t-head (ren-pres ⊢e₁ ρ⊢) (ren-pres ⊢e₂ ρ⊢) refl
+ren-pres (t-mtc ⊢v val-v ⊢e ⊢s) ρ⊢ = t-mtc ⊢v val-v (ren-pres ⊢e ρ⊢) (ren-pres ⊢s ρ⊢)
 
 weaken-typed : ∀ {Γ : Ctx m}{e : Expr m}{ημ}{ημ′}
   → Γ ⊢ e ⦂ ημ
@@ -520,6 +562,7 @@ sub-pres σ⊢ (t-app-p ⊢s₁ ⊢s₂ x) = t-app-p (sub-pres σ⊢ ⊢s₁) (s
 sub-pres σ⊢ (t-sub ⊢e ημ<:) = t-sub (sub-pres σ⊢ ⊢e) ημ<:
 sub-pres σ⊢ t-empty = t-empty
 sub-pres σ⊢ (t-head ⊢e₁ ⊢e₂ refl) = t-head (sub-pres σ⊢ ⊢e₁) (sub-pres σ⊢ ⊢e₂) refl
+sub-pres σ⊢ (t-mtc ⊢v val-v ⊢e ⊢s) = t-mtc ⊢v val-v (sub-pres σ⊢ ⊢e) (sub-pres σ⊢ ⊢s)
 
 -- inversion lemmas
 
@@ -892,6 +935,7 @@ mapE-minus {e = cst k} f f⊢ = f⊢
 mapE-minus {e = abs μ e} f f⊢ = f⊢
 mapE-minus {e = mab ημ e} f f⊢ = f⊢
 mapE-minus {e = app e₁ e₂} f f⊢ = f⊢
+mapE-minus {e = mtc e₁ e₂ e₃} f f⊢ = f⊢
 
 mapE-sub₁ : ∀ {w : Expr zero}{e : Expr (suc zero)}
   → mapE (λ b′ → sub₁ w b′) e ≡ sub₁ w e
@@ -903,6 +947,7 @@ mapE-sub₁ {e = cst x} = refl
 mapE-sub₁ {e = abs x e} = refl
 mapE-sub₁ {e = mab x e} = refl
 mapE-sub₁ {e = app e e₁} = refl
+mapE-sub₁ {e = mtc e e₁ e₂} = refl
 
 
 β₁-pres-s-A· : ∀ {s₁ s₂ w η₁ μ₁ η₂ μ₂ η₃ η η′}
@@ -1250,6 +1295,11 @@ preserve (t-head {η₁ = η₁₂} {η₂ = η₃} ⊢e₁₂ ⊢e₃ refl) mon
 
   η<: : ADD η₁ (ADD η₂ η₃) <:₀ ADD η₁₂ η₃
   η<: = <:₀-trans η-assoc η-step
+preserve (t-mtc ⊢v val-v ⊢e ⊢s) (ξ-match _ red) = t-mtc ⊢v val-v (preserve ⊢e red) ⊢s
+preserve (t-mtc {η = η} ⊢v val-v ⊢e ⊢s) (β-match-eq _ val-e eq) =
+  t-sub ⊢s (<:ₙ-comb EXT0-super <:ₜ-refl)
+preserve (t-mtc {η = η} {μ = μ} ⊢v val-v ⊢e ⊢s) (β-match-neq _ val-e neq) =
+  t-sub t-empty (<:ₙ-comb EXT0-empty <:ₜ-refl)
 
 -- progress
 
@@ -1342,6 +1392,13 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done abs
   with t-mab-inversion ⊢e | t-abs-inversion ⊢e₁
 ... | _ , <:ₙ-comb _ (<:ₜ-⇛ _ _) , _ | _ , <:ₙ-comb _ () , _
 progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-mtc {v = v} {e = e} ⊢v val-v ⊢e ⊢s)
+  with progress ⊢e
+... | step e⟶ = step (ξ-match val-v e⟶)
+... | done val-e
+  with v ≟Expr e
+... | yes refl = step (β-match-eq val-v val-e refl)
+... | no v≢e = step (β-match-neq val-v val-e v≢e)
 
 -- logical relation
 
@@ -1491,6 +1548,12 @@ toAbs (μ₀ , b , refl , _ , _) = v-abs μ₀ b
 ¬𝓥-app {μ = μ ⇒ x} ()
 ¬𝓥-app {μ = x ⇛ x₁} ()
 
+¬𝓥-mtc : ∀ {w₁ w₂ w₃} {μ} → ¬ 𝓥⟦ μ ⟧ (mtc w₁ w₂ w₃)
+¬𝓥-mtc {μ = `⊥} ()
+¬𝓥-mtc {μ = □} ()
+¬𝓥-mtc {μ = μ ⇒ x} ()
+¬𝓥-mtc {μ = x ⇛ x₁} ()
+
 ALL-proj₁ : {P : Pred (Expr zero) lzero}{e₁ e₂ : Expr zero} → ALL P (e₁ · e₂) → ALL P e₁
 ALL-proj₁ (all A· all₁) = all
 ALL-proj₁ (AP {e≢· = e≢·} x) = ⊥-elim (e≢· refl)
@@ -1508,6 +1571,7 @@ all-monoidal-value {w = cst k} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = abs x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = mab x₁ w} ap@(AP x) mono-w len-w = ap , tt , len-w
 all-monoidal-value {w = app w w₁} (AP x) mono-w len-w = ⊥-elim (¬𝓥-app x)
+all-monoidal-value {w = mtc w w₁ w₂} (AP x) mono-w len-w = ⊥-elim (¬𝓥-mtc x)
 
 value-monoidal-nf : ∀ {e} → Value e → monoidal-nf e
 value-monoidal-nf vε = tt
@@ -1704,6 +1768,7 @@ atomic-length (cst x) v≢ε v≢· = refl
 atomic-length (abs x v) v≢ε v≢· = refl
 atomic-length (mab x v) v≢ε v≢· = refl
 atomic-length (app v v₁) v≢ε v≢· = refl
+atomic-length (mtc v v₁ v₂) v≢ε v≢· = refl
 
 atomic-ALL :  {v : Expr zero} {P : Pred _ lzero} → ALL P v → v ≢ ε → (∀ {x y} → v ≢ (x · y)) → P v
 atomic-ALL Aε v≢ε v≢· = ⊥-elim (v≢ε refl)
@@ -1792,6 +1857,7 @@ mono-nonempty-len-plus {e = cst x} mono e≢ε = s≤s z≤n
 mono-nonempty-len-plus {e = abs x e} mono e≢ε = s≤s z≤n
 mono-nonempty-len-plus {e = mab x e} mono e≢ε = s≤s z≤n
 mono-nonempty-len-plus {e = app e e₁} mono e≢ε = s≤s z≤n
+mono-nonempty-len-plus {e = mtc e e₁ e₂} mono e≢ε = s≤s z≤n
 
 mono-concat-len-two : ∀ {e₁ e₂} → monoidal-nf (e₁ · e₂) → suc (suc zero) ≤ℕ lengthE (e₁ · e₂)
 mono-concat-len-two {e₁} {e₂} (e₁≢ε , e₂≢ε , e₁≢· , mono₂)
@@ -1875,6 +1941,7 @@ compatible-app-s {η₁ = η₁}{μ₁ = μ₁}{η₂ = η₂}{μ₂ = μ₂}{η
     mapE-atomic {e = abs x e} e≢ε e≢· = refl
     mapE-atomic {e = mab x e} e≢ε e≢· = refl
     mapE-atomic {e = app e e₁} e≢ε e≢· = refl
+    mapE-atomic {e = mtc e e₁ e₂} e≢ε e≢· = refl
 
     app-s-single-sem
       : ∀ {s η₁ η′}
@@ -2077,6 +2144,30 @@ compatible-head sem-e₁ sem-e₂ x σ σ∈
 ... | w , w∈𝓦 , w₁·w₂⟶*w
   = w , w∈𝓦 , ⟶*-trans (⟶*-trans (ξ-head-* sub-σ-e₁⟶*w₁) (ξ-tail-* (value-𝓦 w₁∈𝓦) sub-σ-e₂⟶*w₂)) w₁·w₂⟶*w
 
+compatible-mtc : ∀ {v}{e}{s}{ημ η μ}
+  → Value v
+  → Γ ⊨ e ⦂ ημ
+  → Γ ⊨ s ⦂ ⟨ η , μ ⟩
+  → Γ ⊨ mtc v e s ⦂ ⟨ EXT0 η , μ ⟩
+compatible-mtc {v = v} {η = η} val-v sem-e sem-s σ σ∈
+  with sem-e σ σ∈
+... | w , w∈𝓦 , sub-σ-e⟶*w
+  with v ≟Expr w
+... | yes v≡w
+  with sem-s σ σ∈
+... | w′ , w′∈𝓦 , sub-σ-s⟶*w′ =
+  w′
+  , <:ₙ-subset (<:ₙ-comb EXT0-super <:ₜ-refl) w′∈𝓦
+  , ⟶*-trans
+      (⟶*-snoc (ξ-match-* val-v sub-σ-e⟶*w) (β-match-eq val-v (value-𝓦 w∈𝓦) v≡w))
+      sub-σ-s⟶*w′
+compatible-mtc {v = v} {η = η} val-v sem-e sem-s σ σ∈
+  | w , w∈𝓦 , sub-σ-e⟶*w
+  | no v≢w =
+  ε
+  , (Aε , tt , EXT0-sound-0 η)
+  , ⟶*-snoc (ξ-match-* val-v sub-σ-e⟶*w) (β-match-neq val-v (value-𝓦 w∈𝓦) v≢w)
+
 
 -- fundamental lemma
 --   syntactic typing implies semantic typing
@@ -2096,3 +2187,5 @@ fundamental (t-sub {e = e} {ημ₁ = ημ₁} {ημ₂ = ημ₂} ⊢e ημ<:) 
 fundamental t-empty = compatible-empty
 fundamental (t-head {e₁ = e₁} {e₂} {η₁} {η₂} {η} {μ} ⊢e ⊢e₁ x)
   = compatible-head {e₁ = e₁} {e₂} {η₁} {η₂} {η} {μ} (fundamental ⊢e) (fundamental ⊢e₁) x
+fundamental (t-mtc {v = v} {e = e} {s = s} {ημ = ημ} {η = η} {μ = μ} ⊢v val-v ⊢e ⊢s)
+  = compatible-mtc {v = v} {e = e} {s = s} {ημ = ημ} {η = η} {μ = μ} val-v (fundamental ⊢e) (fundamental ⊢s)

@@ -25,6 +25,7 @@ ren ρ (cst k) = cst k
 ren ρ (abs μ e) = abs μ (ren (extRen ρ) e)
 ren ρ (mab ημ e) = mab ημ (ren (extRen ρ) e)
 ren ρ (app e e₁) = app (ren ρ e) (ren ρ e₁)
+ren ρ (mtc e₁ e₂ e₃) = mtc e₁ (ren ρ e₂) (ren ρ e₃)
 
 weaken : Expr m → Expr (suc m)
 weaken = ren Fin.suc
@@ -44,6 +45,7 @@ sub σ (cst k) = cst k
 sub σ (abs μ e) = abs μ (sub (liftSub σ) e)
 sub σ (mab ημ e) = mab ημ (sub (liftSub σ) e)
 sub σ (app e e₁) = app (sub σ e) (sub σ e₁)
+sub σ (mtc e₁ e₂ e₃) = mtc e₁ (sub σ e₂) (sub σ e₃)
 
 sub₁σ : Expr n → Sub (suc n) n
 sub₁σ e Fin.zero = e
@@ -84,6 +86,10 @@ sub-cong σ≡τ (app e₁ e₂)
   rewrite sub-cong σ≡τ e₁
         | sub-cong σ≡τ e₂
   = refl
+sub-cong σ≡τ (mtc e₁ e₂ e₃)
+  rewrite sub-cong σ≡τ e₂
+        | sub-cong σ≡τ e₃
+  = refl
 
 extRen-cong : ∀ {k m}{ρ ξ : Ren k m}
   → (∀ x → ρ x ≡ ξ x)
@@ -111,6 +117,10 @@ ren-cong ρ≡ξ (app e₁ e₂)
   rewrite ren-cong ρ≡ξ e₁
         | ren-cong ρ≡ξ e₂
   = refl
+ren-cong ρ≡ξ (mtc e₁ e₂ e₃)
+  rewrite ren-cong ρ≡ξ e₂
+        | ren-cong ρ≡ξ e₃
+  = refl
 
 ren-comp : ∀ {k m ℓ}{ρ : Ren k m}{ξ : Ren m ℓ}{e : Expr k}
   → ren ξ (ren ρ e) ≡ ren (ξ ∘ ρ) e
@@ -134,6 +144,10 @@ ren-comp {ρ = ρ} {ξ = ξ} {e = mab ημ e}
 ren-comp {ρ = ρ} {ξ = ξ} {e = app e₁ e₂}
   rewrite ren-comp {ρ = ρ} {ξ = ξ} {e = e₁}
         | ren-comp {ρ = ρ} {ξ = ξ} {e = e₂}
+  = refl
+ren-comp {ρ = ρ} {ξ = ξ} {e = mtc e₁ e₂ e₃}
+  rewrite ren-comp {ρ = ρ} {ξ = ξ} {e = e₂}
+        | ren-comp {ρ = ρ} {ξ = ξ} {e = e₃}
   = refl
 
 sub-ren : ∀ {k m n}{ρ : Ren k m}{σ : Sub m n}{e : Expr k}
@@ -162,6 +176,10 @@ sub-ren {ρ = ρ} {σ = σ} {e = mab ημ e}
 sub-ren {ρ = ρ} {σ = σ} {e = app e₁ e₂}
   rewrite sub-ren {ρ = ρ} {σ = σ} {e = e₁}
         | sub-ren {ρ = ρ} {σ = σ} {e = e₂}
+  = refl
+sub-ren {ρ = ρ} {σ = σ} {e = mtc e₁ e₂ e₃}
+  rewrite sub-ren {ρ = ρ} {σ = σ} {e = e₂}
+        | sub-ren {ρ = ρ} {σ = σ} {e = e₃}
   = refl
 
 ren-ext-weaken : ∀ {k m}{ρ : Ren k m}{e : Expr k}
@@ -199,6 +217,10 @@ ren-sub {ρ = ρ} {σ = σ} {e = app e₁ e₂}
   rewrite ren-sub {ρ = ρ} {σ = σ} {e = e₁}
         | ren-sub {ρ = ρ} {σ = σ} {e = e₂}
   = refl
+ren-sub {ρ = ρ} {σ = σ} {e = mtc e₁ e₂ e₃}
+  rewrite ren-sub {ρ = ρ} {σ = σ} {e = e₂}
+        | ren-sub {ρ = ρ} {σ = σ} {e = e₃}
+  = refl
 
 sub-id : ∀ {k}{e : Expr k} → sub (λ x → var x) e ≡ e
 sub-id {e = ε} = refl
@@ -221,6 +243,10 @@ sub-id {e = mab ημ e}
 sub-id {e = app e₁ e₂}
   rewrite sub-id {e = e₁}
         | sub-id {e = e₂}
+  = refl
+sub-id {e = mtc e₁ e₂ e₃}
+  rewrite sub-id {e = e₂}
+        | sub-id {e = e₃}
   = refl
 
 sub₁-weaken : ∀ {m}{v : Expr m}{e : Expr m} → sub₁ v (weaken e) ≡ e
@@ -262,6 +288,10 @@ sub-comp {σ = σ} {τ = τ} {e = app e₁ e₂}
   rewrite sub-comp {σ = σ} {τ = τ} {e = e₁}
         | sub-comp {σ = σ} {τ = τ} {e = e₂}
   = refl
+sub-comp {σ = σ} {τ = τ} {e = mtc e₁ e₂ e₃}
+  rewrite sub-comp {σ = σ} {τ = τ} {e = e₂}
+        | sub-comp {σ = σ} {τ = τ} {e = e₃}
+  = refl
 
 sub-ext-lift : {σ : Sub n m}{v : Expr m}{e : Expr (suc n)} → sub (extSub σ v) e ≡ sub₁ v (sub (liftSub σ) e)
 sub-ext-lift {σ = σ} {v = v} {e = e}
@@ -282,3 +312,4 @@ mapE-sub (cst k) = refl
 mapE-sub (abs μ e) = cong (abs μ) refl
 mapE-sub (mab ημ e) = cong (mab ημ) refl
 mapE-sub (app e e₁) = refl
+mapE-sub (mtc e₁ e₂ e₃) = refl
