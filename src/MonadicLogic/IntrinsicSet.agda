@@ -1,3 +1,8 @@
+
+-- This is a failed attempt.
+-- While we can define insert for a single element,
+-- it is not possible to define remove for a single element!
+
 import Level
 
 open import Relation.Binary using (Rel; StrictTotalOrder; IsStrictTotalOrder; IsStrictPartialOrder; IsEquivalence; Trichotomous; tri<; tri≈; tri>; Monotonic₁; Reflexive; Symmetric; Transitive)
@@ -16,7 +21,8 @@ open StrictTotalOrder so using (Carrier; _<_; _≈_; isStrictTotalOrder)
 open IsStrictTotalOrder
 open IsStrictPartialOrder
 
--- Connected R is not transitive: composing just-nothing and nothing-just defies R
+-- Connected R is not transitive: composing just-nothing and nothing-just relates any just x ~ just y
+--    in fact, if (R : Rel A), then Connected R ∘ Connected R is the full relation on Maybe A
 -- Connected does not preserve Trichotomous
 
 data ISet : Maybe Carrier → Set (Level.suc ℓ) where
@@ -83,3 +89,6 @@ insert x {just _} xs′@(y ∷ xs)
 insert x {just _} ((y ∷ xs) {x₁<<xs}) | tri≈ ¬a x≈y ¬c = _∷_ x xs {Connected-resp-≈ x≈y x₁<<xs}
 insert x {just _} ((y ∷ xs) {x₁<<xs}) | tri> ¬a ¬b y<x = _∷_ y (insert x xs) {just (conn-glb y<x x₁<<xs)}
 insert x {nothing} [] = _∷_ x [] {just-nothing}
+
+-- totally unclear how to calculate the resulting index...
+-- remove : ∀ x {my} (xs : ISet my) → ISet ?
