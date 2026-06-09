@@ -49,15 +49,26 @@ mutual
   sound a-cst = t-cst
   sound (a-abs ⊢s) = t-abs (sound ⊢s)
   sound (a-mab ⊢s) = t-mab (sound ⊢s)
-  sound (a-app-s ⊢s₁ ⊢s₂ ηa<:η₃ μa<:μ₁ m₁ m₂) =
+  sound (a-app-s ⊢s₁ ηf<:η₁ μ₁<:μf η₂f<:η₂ μ₂f<:μ₂ ⊢s₂ ηa<:η₃ μa<:μ₁ m₁ m₂) =
     t-app-s
-      (check-sound ⊢s₁)
+      (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ (<:ₜ-⇒ μ₁<:μf (<:ₙ-comb η₂f<:η₂ μ₂f<:μ₂))))
       (t-sub (sound ⊢s₂) (<:ₙ-comb ηa<:η₃ μa<:μ₁))
       m₁
       m₂
-  sound (a-app-p ⊢s₁ ⊢s₂ ηarg<:ημ m) =
+  sound (a-app-p ⊢s₁ ηf<:η₁ ημ<:ημf η₂f<:η₂ μ₂f<:μ₂ ⊢s₂ ηarg<:ημ m) =
     t-app-p
-      (check-sound ⊢s₁)
+      (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ (<:ₜ-⇛ ημ<:ημf (<:ₙ-comb η₂f<:η₂ μ₂f<:μ₂))))
+      (t-sub (sound ⊢s₂) ηarg<:ημ)
+      m
+  sound (a-app-⊥-s {μa = μa} ⊢s₁ ηf<:η₁ ⊢s₂ ηa<:η₃ m₁ m₂) =
+    t-app-s
+      (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ <:ₜ-⊥))
+      (t-sub (sound ⊢s₂) (<:ₙ-comb ηa<:η₃ <:ₜ-refl))
+      m₁
+      m₂
+  sound (a-app-⊥-p ⊢s₁ ηf<:η₁ ⊢s₂ ηarg<:ημ m) =
+    t-app-p
+      (t-sub (sound ⊢s₁) (<:ₙ-comb ηf<:η₁ <:ₜ-⊥))
       (t-sub (sound ⊢s₂) ηarg<:ημ)
       m
   sound a-empty = t-empty
@@ -93,17 +104,27 @@ complete (t-mab {ημ = ημ} ⊢s)
   , <:ₙ-comb <:₀-refl (<:ₜ-⇛ <:ₙ-refl ημ₀<:ημ′)
 complete (t-app-s {η₁ = η₁} {μ₁ = μ₁} {η₂ = η₂} {μ₂ = μ₂} {η₃ = η₃} {η = η} {η′ = η′} ⊢s₁ ⊢s₂ m₁ m₂)
   with complete ⊢s₁ | complete ⊢s₂
-... | ⊢s₁ᶜ
+... | ⟨ ηf , `⊥ ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ <:ₜ-⊥
+    | ⟨ ηa , μa ⟩ , ⊢s₂ᵃ , <:ₙ-comb ηa<:η₃ μa<:μ₁ =
+  ⟨ η , `⊥ ⟩
+  , a-app-⊥-s ⊢s₁ᵃ ηf<:η₁ ⊢s₂ᵃ ηa<:η₃ m₁ m₂
+  , <:ₙ-comb <:₀-refl <:ₜ-⊥
+... | ⟨ ηf , μf ⇒ ⟨ η₂f , μ₂f ⟩ ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ (<:ₜ-⇒ μ₁<:μf (<:ₙ-comb η₂f<:η₂ μ₂f<:μ₂))
     | ⟨ ηa , μa ⟩ , ⊢s₂ᵃ , <:ₙ-comb ηa<:η₃ μa<:μ₁ =
   ⟨ η , μ₂ ⟩
-  , a-app-s ⊢s₁ᶜ ⊢s₂ᵃ ηa<:η₃ μa<:μ₁ m₁ m₂
+  , a-app-s ⊢s₁ᵃ ηf<:η₁ μ₁<:μf η₂f<:η₂ μ₂f<:μ₂ ⊢s₂ᵃ ηa<:η₃ μa<:μ₁ m₁ m₂
   , <:ₙ-refl
 complete (t-app-p {η₁ = η₁} {ημ = ημ} {η₂ = η₂} {μ₂ = μ₂} {η = η} ⊢s₁ ⊢s₂ m)
   with complete ⊢s₁ | complete ⊢s₂
-... | ⊢s₁ᶜ
+... | ⟨ ηf , `⊥ ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ <:ₜ-⊥
+    | ηarg , ⊢s₂ᵃ , ηarg<:ημ =
+  ⟨ η , `⊥ ⟩
+  , a-app-⊥-p ⊢s₁ᵃ ηf<:η₁ ⊢s₂ᵃ ηarg<:ημ m
+  , <:ₙ-comb <:₀-refl <:ₜ-⊥
+... | ⟨ ηf , ημf ⇛ ⟨ η₂f , μ₂f ⟩ ⟩ , ⊢s₁ᵃ , <:ₙ-comb ηf<:η₁ (<:ₜ-⇛ ημ<:ημf (<:ₙ-comb η₂f<:η₂ μ₂f<:μ₂))
     | ηarg , ⊢s₂ᵃ , ηarg<:ημ =
   ⟨ η , μ₂ ⟩
-  , a-app-p ⊢s₁ᶜ ⊢s₂ᵃ ηarg<:ημ m
+  , a-app-p ⊢s₁ᵃ ηf<:η₁ ημ<:ημf η₂f<:η₂ μ₂f<:μ₂ ⊢s₂ᵃ ηarg<:ημ m
   , <:ₙ-refl
 complete (t-sub ⊢e ημ₁<:ημ₂)
   with complete ⊢e
