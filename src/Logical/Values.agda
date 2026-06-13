@@ -10,7 +10,7 @@ open import Expressions
 
 -- values
 
-data Value : Expr zero → Set where
+data Value {n} : Expr n → Set where
   vε  : Value ε
   _v·_ : ∀ {v}{w}
     → Value v

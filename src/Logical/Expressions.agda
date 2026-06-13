@@ -25,16 +25,6 @@ data Expr (n : ℕ) : Set where
   app : Expr n → Expr n → Expr n
   mtc : Expr zero → Expr n → Expr n → Expr n
 
--- maplets
-
-infix 4 [_⦂_↦_] [_⦂_⤇_]
-
-[_⦂_↦_] : ∀ {n} → Expr zero → Ty → Expr (suc n) → Expr n
-[ v ⦂ μ ↦ s ] = abs μ (mtc v (var fzero) s)
-
-[_⦂_⤇_] : ∀ {n} → Expr zero → NTy → Expr (suc n) → Expr n
-[ w ⦂ ημ ⤇ s ] = mab ημ (mtc w (var fzero) s)
-
 
 _≟Expr_ : ∀ {n} → (e e′ : Expr n) → Dec (e ≡ e′)
 ε ≟Expr ε = yes refl
