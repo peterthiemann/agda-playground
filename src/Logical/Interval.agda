@@ -2,7 +2,7 @@ module Interval where
 
 open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ;zero;suc) renaming (_≤_ to _≤ℕ_; _⊔_ to _⊔ℕ_; _+_ to _+ℕ_; _*_ to _*ℕ_; _⊓_ to _⊓ℕ_)
-open import Data.Nat.Properties using (≤-refl; *-zeroʳ; +-identityʳ)
+open import Data.Nat.Properties using (≤-refl; *-zeroʳ; *-identityʳ; +-identityʳ)
 open import Data.Maybe using (Maybe; nothing; just)
 open import Data.Product using (_×_; _,_)
 open import Data.Unit using (⊤; tt)
@@ -23,8 +23,13 @@ n ∈∈ ⟪ lo , nothing ⟫ = lo ≤ℕ n
 
 _⊔M_ : Maybe ℕ → Maybe ℕ → Maybe ℕ
 just x ⊔M just x₁ = just (x ⊔ℕ x₁)
-just x ⊔M nothing = just x
-nothing ⊔M x₁ = x₁
+just x ⊔M nothing = nothing
+nothing ⊔M x₁ = nothing
+
+_⊓M_ : Maybe ℕ → Maybe ℕ → Maybe ℕ
+just x ⊓M just x₁ = just (x ⊓ℕ x₁)
+just x ⊓M nothing = just x
+nothing ⊓M x₁ = x₁
 
 _≤M_ : Maybe ℕ → Maybe ℕ → Set
 x ≤M nothing = ⊤
@@ -60,8 +65,15 @@ nothing +M x₁ = nothing
 *M-identity-left {just x} = cong just (+-identityʳ x)
 *M-identity-left {nothing} = refl
 
+*M-identity-right : ∀ {x} → x *M just 1 ≡ x
+*M-identity-right {just x} = cong just (*-identityʳ x)
+*M-identity-right {nothing} = refl
+
 _⊔_ : Ivl → Ivl → Ivl
 ⟪ lo , hi ⟫ ⊔ ⟪ lo₁ , hi₁ ⟫ = ⟪ lo ⊓ℕ lo₁ , hi ⊔M hi₁ ⟫
+
+_⊓_ : Ivl → Ivl → Ivl
+⟪ lo , hi ⟫ ⊓ ⟪ lo₁ , hi₁ ⟫ = ⟪ lo ⊔ℕ lo₁ , hi ⊓M hi₁ ⟫
 
 _≤_ : Ivl → Ivl → Set
 ⟪ lo , hi ⟫ ≤ ⟪ lo₁ , hi₁ ⟫ = lo₁ ≤ℕ lo × (hi ≤M hi₁)

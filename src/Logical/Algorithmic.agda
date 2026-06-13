@@ -7,6 +7,7 @@ open import Data.Unit using (⊤)
 
 open import Numeri
 open import Types
+open import AlgorithmicOps using (_⊔_)
 open import Expressions
 open import Values using (Value)
 open import SimplyNumbered using (Ctx; ∅; lookup; _▻_; _⊢_⦂_)
@@ -58,27 +59,17 @@ mutual
       → (ημ ▻ Γ) ⊢ᵃ s ⦂ ημ′
       → Γ ⊢ᵃ mab ημ s ⦂ ⟨ `! , ημ ⇛ ημ′ ⟩
 
-    a-app-s : ∀ {s₁ s₂ ηf μf η₁ μ₁ η₂f μ₂f η₂ μ₂ ηa μa η₃ η η′}
-      → Γ ⊢ᵃ s₁ ⦂ ⟨ ηf , μf ⇒ ⟨ η₂f , μ₂f ⟩ ⟩
-      → ηf <:₀ η₁
-      → μ₁ <:ₜ μf
-      → η₂f <:₀ η₂
-      → μ₂f <:ₜ μ₂
-      → Γ ⊢ᵃ s₂ ⦂ ⟨ ηa , μa ⟩
-      → ηa <:₀ η₃
+    a-app-s : ∀ {s₁ s₂ η₁ μ₁ η₂ μ₂ μa η₃ η η′}
+      → Γ ⊢ᵃ s₁ ⦂ ⟨ η₁ , μ₁ ⇒ ⟨ η₂ , μ₂ ⟩ ⟩
+      → Γ ⊢ᵃ s₂ ⦂ ⟨ η₃ , μa ⟩
       → μa <:ₜ μ₁
       → MUL η₁ η₂ η′
       → MUL η′ η₃ η
       → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
 
-    a-app-p : ∀ {s₁ s₂ ηf ημf η₁ ημ ηarg η₂f μ₂f η₂ μ₂ η}
-      → Γ ⊢ᵃ s₁ ⦂ ⟨ ηf , ημf ⇛ ⟨ η₂f , μ₂f ⟩ ⟩
-      → ηf <:₀ η₁
-      → ημ <:ₙ ημf
-      → η₂f <:₀ η₂
-      → μ₂f <:ₜ μ₂
-      → Γ ⊢ᵃ s₂ ⦂ ηarg
-      → ηarg <:ₙ ημ
+    a-app-p : ∀ {s₁ s₂ η₁ ημ η₂ μ₂ η}
+      → Γ ⊢ᵃ s₁ ⦂ ⟨ η₁ , ημ ⇛ ⟨ η₂ , μ₂ ⟩ ⟩
+      → Γ ⊢ᶜ s₂ ⦂ ημ
       → MUL η₁ η₂ η
       → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , μ₂ ⟩
 
@@ -91,23 +82,18 @@ mutual
       → MUL η′ η₃ η
       → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , `⊥ ⟩
 
-    a-app-⊥-p : ∀ {s₁ s₂ ηf η₁ ημ ηarg η₂ η}
-      → Γ ⊢ᵃ s₁ ⦂ ⟨ ηf , `⊥ ⟩
-      → ηf <:₀ η₁
+    a-app-⊥-p : ∀ {s₁ s₂ η₁ ηarg}
+      → Γ ⊢ᵃ s₁ ⦂ ⟨ η₁ , `⊥ ⟩
       → Γ ⊢ᵃ s₂ ⦂ ηarg
-      → ηarg <:ₙ ημ
-      → MUL η₁ η₂ η
-      → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ η , `⊥ ⟩
+      → Γ ⊢ᵃ app s₁ s₂ ⦂ ⟨ `- , `⊥ ⟩
 
     a-empty :
       Γ ⊢ᵃ ε ⦂ ⟨ `- , `⊥ ⟩
 
-    a-head : ∀ {e₁ e₂ η₁ μ₁ η₂ μ₂ μ}
+    a-head : ∀ {e₁ e₂ η₁ μ₁ η₂ μ₂}
       → Γ ⊢ᵃ e₁ ⦂ ⟨ η₁ , μ₁ ⟩
       → Γ ⊢ᵃ e₂ ⦂ ⟨ η₂ , μ₂ ⟩
-      → μ₁ <:ₜ μ
-      → μ₂ <:ₜ μ
-      → Γ ⊢ᵃ (e₁ · e₂) ⦂ ⟨ ADD η₁ η₂ , μ ⟩
+      → Γ ⊢ᵃ (e₁ · e₂) ⦂ ⟨ ADD η₁ η₂ , μ₁ ⊔ μ₂ ⟩
 
     a-mtc : ∀ {v e s ημ η μ}
       → ∅ ⊢ᶜ v ⦂ ημ

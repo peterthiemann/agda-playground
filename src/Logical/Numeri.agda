@@ -5,7 +5,7 @@ open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
 open import Data.Fin using (Fin)
 open import Data.Nat using (ℕ; zero; suc; z≤n; s≤s) renaming (_⊔_ to _⊔ℕ_; _⊓_ to _⊓ℕ_; _≤_ to _≤ℕ_; _*_ to _*ℕ_; _+_ to _+ℕ_)
-open import Data.Nat.Properties using (+-identityʳ; *-zeroʳ; ≤-refl; ≤-trans; ≤-antisym; m≤n+m; m≤m+n)
+open import Data.Nat.Properties using (+-identityʳ; *-zeroʳ; *-identityʳ; ≤-refl; ≤-trans; ≤-antisym; m≤n+m; m≤m+n)
 open import Data.Product using (Σ; _×_; _,_; proj₁; proj₂; ∃-syntax)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.List using (List; []; _∷_; length; map; concat; _++_)
@@ -328,6 +328,32 @@ EXT0 `? = `?
 EXT0 `* = `*
 EXT0 `+ = `*
 
+EXT0-super : ∀ {η} → η <:₀ EXT0 η
+EXT0-super {`- } = <:₀-refl
+EXT0-super {`!} = <:₀-!?
+EXT0-super {`?} = <:₀-refl
+EXT0-super {`*} = <:₀-refl
+EXT0-super {`+} = <:₀-+*
+
+EXT0-empty : ∀ {η} → `- <:₀ EXT0 η
+EXT0-empty {`- } = <:₀-refl
+EXT0-empty {`!} = <:₀--?
+EXT0-empty {`?} = <:₀--?
+EXT0-empty {`*} = <:₀--*
+EXT0-empty {`+} = <:₀--*
+
+EXT0-monotone : ∀ {η₁ η₂}
+  → η₁ <:₀ η₂
+  → EXT0 η₁ <:₀ EXT0 η₂
+EXT0-monotone <:₀-refl = <:₀-refl
+EXT0-monotone <:₀--? = <:₀--?
+EXT0-monotone <:₀--* = <:₀--*
+EXT0-monotone <:₀-!? = <:₀-refl
+EXT0-monotone <:₀-!* = <:₀-?*
+EXT0-monotone <:₀-!+ = <:₀-?*
+EXT0-monotone <:₀-?* = <:₀-?*
+EXT0-monotone <:₀-+* = <:₀-refl
+
 EXT0-sound-0 : ∀ η → 0 ∈∈ 𝓝⟦ EXT0 η ⟧
 EXT0-sound-0 `- = z≤n , z≤n
 EXT0-sound-0 `! = z≤n , z≤n
@@ -346,7 +372,7 @@ data MUL : Num → Num → Num → Set where
   m0-left : ∀ {η} → MUL `- η `-
   m0-right : ∀ {η} → MUL η `- `-
   m1-left : ∀ {η} → MUL `! η η
-  m1-right : ∀ {η} → MUL `! η η
+  m1-right : ∀ {η} → MUL η `! η
   m2-diag : MUL `? `? `?
   m3-diag : MUL `+ `+ `+
   m4-diag : MUL `* `* `*
@@ -356,6 +382,156 @@ data MUL : Num → Num → Num → Set where
   m42     : MUL `* `? `*
   m34     : MUL `+ `* `*
   m43     : MUL `* `+ `*
+
+MUL₀ : Num → Num → Num
+MUL₀ `- η₂ = `-
+MUL₀ `! η₂ = η₂
+MUL₀ `? `- = `-
+MUL₀ `? `! = `?
+MUL₀ `? `? = `?
+MUL₀ `? `* = `*
+MUL₀ `? `+ = `*
+MUL₀ `* `- = `-
+MUL₀ `* `! = `*
+MUL₀ `* `? = `*
+MUL₀ `* `* = `*
+MUL₀ `* `+ = `*
+MUL₀ `+ `- = `-
+MUL₀ `+ `! = `+
+MUL₀ `+ `? = `*
+MUL₀ `+ `* = `*
+MUL₀ `+ `+ = `+
+
+MUL₀-sound : ∀ η₁ η₂ → MUL η₁ η₂ (MUL₀ η₁ η₂)
+MUL₀-sound `- η₂ = m0-left
+MUL₀-sound `! η₂ = m1-left
+MUL₀-sound `? `- = m0-right
+MUL₀-sound `? `! = m1-right
+MUL₀-sound `? `? = m2-diag
+MUL₀-sound `? `* = m24
+MUL₀-sound `? `+ = m23
+MUL₀-sound `* `- = m0-right
+MUL₀-sound `* `! = m1-right
+MUL₀-sound `* `? = m42
+MUL₀-sound `* `* = m4-diag
+MUL₀-sound `* `+ = m43
+MUL₀-sound `+ `- = m0-right
+MUL₀-sound `+ `! = m1-right
+MUL₀-sound `+ `? = m32
+MUL₀-sound `+ `* = m34
+MUL₀-sound `+ `+ = m3-diag
+
+MUL₀-complete : ∀ {η₁ η₂ η} → MUL η₁ η₂ η → MUL₀ η₁ η₂ <:₀ η
+MUL₀-complete m0-left = <:₀-refl
+MUL₀-complete {η₁ = `- } m0-right = <:₀-refl
+MUL₀-complete {η₁ = `!} m0-right = <:₀-refl
+MUL₀-complete {η₁ = `?} m0-right = <:₀-refl
+MUL₀-complete {η₁ = `*} m0-right = <:₀-refl
+MUL₀-complete {η₁ = `+} m0-right = <:₀-refl
+MUL₀-complete m1-left = <:₀-refl
+MUL₀-complete {η₁ = `- } m1-right = <:₀-refl
+MUL₀-complete {η₁ = `!} m1-right = <:₀-refl
+MUL₀-complete {η₁ = `?} m1-right = <:₀-refl
+MUL₀-complete {η₁ = `*} m1-right = <:₀-refl
+MUL₀-complete {η₁ = `+} m1-right = <:₀-refl
+MUL₀-complete m2-diag = <:₀-refl
+MUL₀-complete m3-diag = <:₀-refl
+MUL₀-complete m4-diag = <:₀-refl
+MUL₀-complete m23 = <:₀-refl
+MUL₀-complete m32 = <:₀-refl
+MUL₀-complete m24 = <:₀-refl
+MUL₀-complete m42 = <:₀-refl
+MUL₀-complete m34 = <:₀-refl
+MUL₀-complete m43 = <:₀-refl
+
+MUL₀-monotone-left : ∀ {η₁ η₂ η₃}
+  → η₁ <:₀ η₂
+  → MUL₀ η₁ η₃ <:₀ MUL₀ η₂ η₃
+MUL₀-monotone-left <:₀-refl = <:₀-refl
+MUL₀-monotone-left {η₃ = `- } <:₀--? = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀--? = <:₀--?
+MUL₀-monotone-left {η₃ = `?} <:₀--? = <:₀--?
+MUL₀-monotone-left {η₃ = `*} <:₀--? = <:₀--*
+MUL₀-monotone-left {η₃ = `+} <:₀--? = <:₀--*
+MUL₀-monotone-left {η₃ = `- } <:₀--* = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀--* = <:₀--*
+MUL₀-monotone-left {η₃ = `?} <:₀--* = <:₀--*
+MUL₀-monotone-left {η₃ = `*} <:₀--* = <:₀--*
+MUL₀-monotone-left {η₃ = `+} <:₀--* = <:₀--*
+MUL₀-monotone-left {η₃ = `- } <:₀-!? = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀-!? = <:₀-!?
+MUL₀-monotone-left {η₃ = `?} <:₀-!? = <:₀-refl
+MUL₀-monotone-left {η₃ = `*} <:₀-!? = <:₀-refl
+MUL₀-monotone-left {η₃ = `+} <:₀-!? = <:₀-+*
+MUL₀-monotone-left {η₃ = `- } <:₀-!* = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀-!* = <:₀-!*
+MUL₀-monotone-left {η₃ = `?} <:₀-!* = <:₀-?*
+MUL₀-monotone-left {η₃ = `*} <:₀-!* = <:₀-refl
+MUL₀-monotone-left {η₃ = `+} <:₀-!* = <:₀-+*
+MUL₀-monotone-left {η₃ = `- } <:₀-!+ = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀-!+ = <:₀-!+
+MUL₀-monotone-left {η₃ = `?} <:₀-!+ = <:₀-?*
+MUL₀-monotone-left {η₃ = `*} <:₀-!+ = <:₀-refl
+MUL₀-monotone-left {η₃ = `+} <:₀-!+ = <:₀-refl
+MUL₀-monotone-left {η₃ = `- } <:₀-?* = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀-?* = <:₀-?*
+MUL₀-monotone-left {η₃ = `?} <:₀-?* = <:₀-?*
+MUL₀-monotone-left {η₃ = `*} <:₀-?* = <:₀-refl
+MUL₀-monotone-left {η₃ = `+} <:₀-?* = <:₀-refl
+MUL₀-monotone-left {η₃ = `- } <:₀-+* = <:₀-refl
+MUL₀-monotone-left {η₃ = `!} <:₀-+* = <:₀-+*
+MUL₀-monotone-left {η₃ = `?} <:₀-+* = <:₀-refl
+MUL₀-monotone-left {η₃ = `*} <:₀-+* = <:₀-refl
+MUL₀-monotone-left {η₃ = `+} <:₀-+* = <:₀-+*
+
+MUL₀-monotone-right : ∀ {η₁ η₂ η₃}
+  → η₂ <:₀ η₃
+  → MUL₀ η₁ η₂ <:₀ MUL₀ η₁ η₃
+MUL₀-monotone-right <:₀-refl = <:₀-refl
+MUL₀-monotone-right {η₁ = `- } <:₀--? = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀--? = <:₀--?
+MUL₀-monotone-right {η₁ = `?} <:₀--? = <:₀--?
+MUL₀-monotone-right {η₁ = `*} <:₀--? = <:₀--*
+MUL₀-monotone-right {η₁ = `+} <:₀--? = <:₀--*
+MUL₀-monotone-right {η₁ = `- } <:₀--* = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀--* = <:₀--*
+MUL₀-monotone-right {η₁ = `?} <:₀--* = <:₀--*
+MUL₀-monotone-right {η₁ = `*} <:₀--* = <:₀--*
+MUL₀-monotone-right {η₁ = `+} <:₀--* = <:₀--*
+MUL₀-monotone-right {η₁ = `- } <:₀-!? = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀-!? = <:₀-!?
+MUL₀-monotone-right {η₁ = `?} <:₀-!? = <:₀-refl
+MUL₀-monotone-right {η₁ = `*} <:₀-!? = <:₀-refl
+MUL₀-monotone-right {η₁ = `+} <:₀-!? = <:₀-+*
+MUL₀-monotone-right {η₁ = `- } <:₀-!* = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀-!* = <:₀-!*
+MUL₀-monotone-right {η₁ = `?} <:₀-!* = <:₀-?*
+MUL₀-monotone-right {η₁ = `*} <:₀-!* = <:₀-refl
+MUL₀-monotone-right {η₁ = `+} <:₀-!* = <:₀-+*
+MUL₀-monotone-right {η₁ = `- } <:₀-!+ = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀-!+ = <:₀-!+
+MUL₀-monotone-right {η₁ = `?} <:₀-!+ = <:₀-?*
+MUL₀-monotone-right {η₁ = `*} <:₀-!+ = <:₀-refl
+MUL₀-monotone-right {η₁ = `+} <:₀-!+ = <:₀-refl
+MUL₀-monotone-right {η₁ = `- } <:₀-?* = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀-?* = <:₀-?*
+MUL₀-monotone-right {η₁ = `?} <:₀-?* = <:₀-?*
+MUL₀-monotone-right {η₁ = `*} <:₀-?* = <:₀-refl
+MUL₀-monotone-right {η₁ = `+} <:₀-?* = <:₀-refl
+MUL₀-monotone-right {η₁ = `- } <:₀-+* = <:₀-refl
+MUL₀-monotone-right {η₁ = `!} <:₀-+* = <:₀-+*
+MUL₀-monotone-right {η₁ = `?} <:₀-+* = <:₀-refl
+MUL₀-monotone-right {η₁ = `*} <:₀-+* = <:₀-refl
+MUL₀-monotone-right {η₁ = `+} <:₀-+* = <:₀-+*
+
+MUL₀-monotone : ∀ {η₁ η₂ η₁′ η₂′}
+  → η₁ <:₀ η₁′
+  → η₂ <:₀ η₂′
+  → MUL₀ η₁ η₂ <:₀ MUL₀ η₁′ η₂′
+MUL₀-monotone {η₂ = η₂} {η₁′ = η₁′} η₁<:η₁′ η₂<:η₂′ =
+  <:₀-trans
+    (MUL₀-monotone-left {η₃ = η₂} η₁<:η₁′)
+    (MUL₀-monotone-right {η₁ = η₁′} η₂<:η₂′)
   
 ADD-left-empty-super : ∀ {η₁ η₂} → `- <:₀ η₁ → η₂ <:₀ ADD η₁ η₂
 ADD-left-empty-super {η₁ = `- } {η₂} <:₀-refl = <:₀-refl
@@ -550,6 +726,22 @@ ADD-monotone-left {η₃ = `! } <:₀-+* = <:₀-refl
 ADD-monotone-left {η₃ = `? } <:₀-+* = <:₀-+*
 ADD-monotone-left {η₃ = `* } <:₀-+* = <:₀-+*
 ADD-monotone-left {η₃ = `+ } <:₀-+* = <:₀-refl
+
+ADD-monotone-right : ∀ {η₁ η₂ η₃}
+  → η₂ <:₀ η₃
+  → ADD η₁ η₂ <:₀ ADD η₁ η₃
+ADD-monotone-right {η₁} {η₂} {η₃} η₂<:η₃
+  rewrite ADD-comm {η₁} {η₂}
+        | ADD-comm {η₁} {η₃}
+  = ADD-monotone-left η₂<:η₃
+
+ADD-monotone-both : ∀ {η₁ η₂ η₁′ η₂′}
+  → η₁ <:₀ η₁′
+  → η₂ <:₀ η₂′
+  → ADD η₁ η₂ <:₀ ADD η₁′ η₂′
+ADD-monotone-both η₁<:η₁′ η₂<:η₂′ =
+  <:₀-trans (ADD-monotone-left η₁<:η₁′) (ADD-monotone-right η₂<:η₂′)
+
 ADD-empty-super : ∀ {η₁ η₂} → `- <:₀ η₁ → `- <:₀ η₂ → `- <:₀ ADD η₁ η₂
 ADD-empty-super <:₀-refl η₂<: = η₂<:
 ADD-empty-super <:₀--? <:₀-refl = <:₀--?
@@ -573,32 +765,48 @@ ADD-self-super-mul : ∀ {η₁ η₂ η′ η₃ η}
 ADD-self-super-mul () m0-left m₂
 ADD-self-super-mul +<:η₁ m0-right m0-left = <:₀-refl
 ADD-self-super-mul +<:η₁ m0-right m0-right = <:₀-refl
+ADD-self-super-mul +<:η₁ m0-right m1-right = <:₀-refl
 ADD-self-super-mul () m1-left m₂
-ADD-self-super-mul () m1-right m₂
+ADD-self-super-mul <:₀-refl m1-right m0-right = <:₀-refl
+ADD-self-super-mul <:₀-refl m1-right m1-right = <:₀-refl
+ADD-self-super-mul <:₀-refl m1-right m3-diag = <:₀-refl
+ADD-self-super-mul <:₀-refl m1-right m32 = <:₀-refl
+ADD-self-super-mul <:₀-refl m1-right m34 = <:₀-refl
+ADD-self-super-mul <:₀-+* m1-right m0-right = <:₀-refl
+ADD-self-super-mul <:₀-+* m1-right m1-right = <:₀-refl
+ADD-self-super-mul <:₀-+* m1-right m4-diag = <:₀-refl
+ADD-self-super-mul <:₀-+* m1-right m42 = <:₀-refl
+ADD-self-super-mul <:₀-+* m1-right m43 = <:₀-refl
 ADD-self-super-mul () m2-diag m₂
 ADD-self-super-mul <:₀-refl m3-diag m3-diag = <:₀-refl
 ADD-self-super-mul <:₀-refl m3-diag m0-right = <:₀-refl
+ADD-self-super-mul <:₀-refl m3-diag m1-right = <:₀-refl
 ADD-self-super-mul <:₀-refl m3-diag m32 = <:₀-refl
 ADD-self-super-mul <:₀-refl m3-diag m34 = <:₀-refl
 ADD-self-super-mul <:₀-+* m4-diag m0-right = <:₀-refl
+ADD-self-super-mul <:₀-+* m4-diag m1-right = <:₀-refl
 ADD-self-super-mul <:₀-+* m4-diag m4-diag = <:₀-refl
 ADD-self-super-mul <:₀-+* m4-diag m42 = <:₀-refl
 ADD-self-super-mul <:₀-+* m4-diag m43 = <:₀-refl
 ADD-self-super-mul () m23 m₂
 ADD-self-super-mul <:₀-refl m32 m0-right = <:₀-refl
+ADD-self-super-mul <:₀-refl m32 m1-right = <:₀-refl
 ADD-self-super-mul <:₀-refl m32 m4-diag = <:₀-refl
 ADD-self-super-mul <:₀-refl m32 m42 = <:₀-refl
 ADD-self-super-mul <:₀-refl m32 m43 = <:₀-refl
 ADD-self-super-mul () m24 m₂
 ADD-self-super-mul <:₀-+* m42 m0-right = <:₀-refl
+ADD-self-super-mul <:₀-+* m42 m1-right = <:₀-refl
 ADD-self-super-mul <:₀-+* m42 m4-diag = <:₀-refl
 ADD-self-super-mul <:₀-+* m42 m42 = <:₀-refl
 ADD-self-super-mul <:₀-+* m42 m43 = <:₀-refl
 ADD-self-super-mul <:₀-refl m34 m0-right = <:₀-refl
+ADD-self-super-mul <:₀-refl m34 m1-right = <:₀-refl
 ADD-self-super-mul <:₀-refl m34 m4-diag = <:₀-refl
 ADD-self-super-mul <:₀-refl m34 m42 = <:₀-refl
 ADD-self-super-mul <:₀-refl m34 m43 = <:₀-refl
 ADD-self-super-mul <:₀-+* m43 m0-right = <:₀-refl
+ADD-self-super-mul <:₀-+* m43 m1-right = <:₀-refl
 ADD-self-super-mul <:₀-+* m43 m4-diag = <:₀-refl
 ADD-self-super-mul <:₀-+* m43 m42 = <:₀-refl
 ADD-self-super-mul <:₀-+* m43 m43 = <:₀-refl
@@ -611,8 +819,7 @@ ADD-self-super-plus +<:η₃ m0-left = <:₀-refl
 ADD-self-super-plus () m0-right
 ADD-self-super-plus <:₀-refl m1-left = <:₀-refl
 ADD-self-super-plus <:₀-+* m1-left = <:₀-refl
-ADD-self-super-plus <:₀-refl m1-right = <:₀-refl
-ADD-self-super-plus <:₀-+* m1-right = <:₀-refl
+ADD-self-super-plus () m1-right
 ADD-self-super-plus () m2-diag
 ADD-self-super-plus <:₀-refl m3-diag = <:₀-refl
 ADD-self-super-plus <:₀-+* m4-diag = <:₀-refl
@@ -628,10 +835,12 @@ ADD-self-super-mul-left : ∀ {η₁ η₂ η}
   → MUL η₁ η₂ η
   → ADD η η <:₀ η
 ADD-self-super-mul-left <:₀-refl m0-right = <:₀-refl
+ADD-self-super-mul-left <:₀-refl m1-right = <:₀-refl
 ADD-self-super-mul-left <:₀-refl m3-diag = <:₀-refl
 ADD-self-super-mul-left <:₀-refl m32 = <:₀-refl
 ADD-self-super-mul-left <:₀-refl m34 = <:₀-refl
 ADD-self-super-mul-left <:₀-+* m0-right = <:₀-refl
+ADD-self-super-mul-left <:₀-+* m1-right = <:₀-refl
 ADD-self-super-mul-left <:₀-+* m4-diag = <:₀-refl
 ADD-self-super-mul-left <:₀-+* m42 = <:₀-refl
 ADD-self-super-mul-left <:₀-+* m43 = <:₀-refl
@@ -640,7 +849,9 @@ MUL-left-empty : ∀ {η₁ η₂ η} → `- <:₀ η₁ → MUL η₁ η₂ η 
 MUL-left-empty η₁<: m0-left = <:₀-refl
 MUL-left-empty η₁<: m0-right = <:₀-refl
 MUL-left-empty () m1-left
-MUL-left-empty () m1-right
+MUL-left-empty <:₀-refl m1-right = <:₀-refl
+MUL-left-empty <:₀--? m1-right = <:₀--?
+MUL-left-empty <:₀--* m1-right = <:₀--*
 MUL-left-empty <:₀--? m2-diag = <:₀--?
 MUL-left-empty () m3-diag
 MUL-left-empty <:₀--* m4-diag = <:₀--*
@@ -655,7 +866,7 @@ MUL-right-empty : ∀ {η₁ η₂ η} → `- <:₀ η₂ → MUL η₁ η₂ η
 MUL-right-empty η₂<: m0-left = <:₀-refl
 MUL-right-empty η₂<: m0-right = <:₀-refl
 MUL-right-empty η₂<: m1-left = η₂<:
-MUL-right-empty η₂<: m1-right = η₂<:
+MUL-right-empty () m1-right
 MUL-right-empty <:₀--? m2-diag = <:₀--?
 MUL-right-empty () m3-diag
 MUL-right-empty <:₀--* m4-diag = <:₀--*
@@ -671,6 +882,9 @@ MUL-left-one-super () m0-left
 MUL-left-one-super !<:η₁ m0-right = <:₀-refl
 MUL-left-one-super <:₀-refl m1-left = <:₀-refl
 MUL-left-one-super <:₀-refl m1-right = <:₀-refl
+MUL-left-one-super <:₀-!? m1-right = <:₀-!?
+MUL-left-one-super <:₀-!* m1-right = <:₀-!*
+MUL-left-one-super <:₀-!+ m1-right = <:₀-!+
 MUL-left-one-super <:₀-!? m2-diag = <:₀-refl
 MUL-left-one-super <:₀-!+ m3-diag = <:₀-refl
 MUL-left-one-super <:₀-!* m4-diag = <:₀-refl
@@ -685,7 +899,7 @@ MUL-right-one-super : ∀ {η₁ η₂ η} → `! <:₀ η₂ → MUL η₁ η�
 MUL-right-one-super !<:η₂ m0-left = <:₀-refl
 MUL-right-one-super () m0-right
 MUL-right-one-super !<:η₂ m1-left = !<:η₂
-MUL-right-one-super !<:η₂ m1-right = !<:η₂
+MUL-right-one-super <:₀-refl m1-right = <:₀-refl
 MUL-right-one-super <:₀-!? m2-diag = <:₀-refl
 MUL-right-one-super <:₀-!+ m3-diag = <:₀-refl
 MUL-right-one-super <:₀-!* m4-diag = <:₀-refl
@@ -700,7 +914,7 @@ MUL-sound : ∀ η₁ η₂ {η} → MUL η₁ η₂ η → (𝓝⟦ η₁ ⟧ *
 MUL-sound η₁ η₂ {η} m0-left rewrite *M-zero-left {𝓝⟦ η₂ ⟧ .Ivl.hi} = z≤n , z≤n
 MUL-sound η₁ η₂ {η} m0-right rewrite *M-zero-right {𝓝⟦ η₁ ⟧ .Ivl.hi} = z≤n , z≤n
 MUL-sound η₁ η₂ {η} m1-left rewrite +-identityʳ (𝓝⟦ η₂ ⟧ .Ivl.lo) | *M-identity-left {𝓝⟦ η₂ ⟧ .Ivl.hi} = ≤-refl , ≤M-refl
-MUL-sound η₁ η₂ {η} m1-right rewrite +-identityʳ (𝓝⟦ η₂ ⟧ .Ivl.lo) | *M-identity-left {𝓝⟦ η₂ ⟧ .Ivl.hi} = ≤-refl , ≤M-refl
+MUL-sound η₁ η₂ {η} m1-right rewrite *-identityʳ (𝓝⟦ η₁ ⟧ .Ivl.lo) | *M-identity-right {𝓝⟦ η₁ ⟧ .Ivl.hi} = ≤-refl , ≤M-refl
 MUL-sound η₁ η₂ {η} m2-diag = z≤n , (s≤s z≤n)
 MUL-sound η₁ η₂ {η} m3-diag = (s≤s z≤n) , tt
 MUL-sound η₁ η₂ {η} m4-diag = z≤n , tt

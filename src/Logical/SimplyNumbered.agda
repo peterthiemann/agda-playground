@@ -488,20 +488,6 @@ data _⊢_⦂_  {n} : Ctx n → Expr n → NTy → Set where
     → Γ ⊢ s ⦂ ⟨ η , μ ⟩
     → Γ ⊢ mtc v e s ⦂ ⟨ EXT0 η , μ ⟩
 
-EXT0-super : ∀ {η} → η <:₀ EXT0 η
-EXT0-super {`- } = <:₀-refl
-EXT0-super {`!} = <:₀-!?
-EXT0-super {`?} = <:₀-refl
-EXT0-super {`*} = <:₀-refl
-EXT0-super {`+} = <:₀-+*
-
-EXT0-empty : ∀ {η} → `- <:₀ EXT0 η
-EXT0-empty {`- } = <:₀-refl
-EXT0-empty {`!} = <:₀--?
-EXT0-empty {`?} = <:₀--?
-EXT0-empty {`*} = <:₀--*
-EXT0-empty {`+} = <:₀--*
-
 -- typed renaming and substitution
 
 infix 2 _⊢ₛ_∶_
@@ -1368,29 +1354,17 @@ progress (t-head ⊢e ⊢e₁ add-eq) | done (v v· v₁) | done w = step mon-·
 progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done vε = step mon-ε-unit-right
 progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done ww@(w v· w₁) = done ((cst v· ww) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done cst = done ((cst v· cst) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
-progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done abs
-  with t-cst-inversion ⊢e | t-abs-inversion ⊢e₁
-... | <:ₙ-comb _ <:ₜ-□ | _ , <:ₙ-comb _ () , _
-progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done mab
-  with t-cst-inversion ⊢e | t-mab-inversion ⊢e₁
-... | <:ₙ-comb _ <:ₜ-□ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done abs = done ((cst v· abs) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done cst | done mab = done ((cst v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done vε = step mon-ε-unit-right
 progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done ww@(w v· w₁) = done ((abs v· ww) {λ ()}{λ ()} {λ {e₁} {e₂} ()})
-progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done cst
-  with t-abs-inversion ⊢e | t-cst-inversion ⊢e₁
-... | _ , <:ₙ-comb _ () , _ | <:ₙ-comb _ <:ₜ-□
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done cst = done ((abs v· cst) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done abs = done ((abs v· abs) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
-progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done mab
-  with t-abs-inversion ⊢e | t-mab-inversion ⊢e₁
-... | _ , <:ₙ-comb _ (<:ₜ-⇒ _ _) , _ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done abs | done mab = done ((abs v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done vε = step mon-ε-unit-right
 progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done ww@(w v· w₁) = done ((mab v· ww) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
-progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done cst
-  with t-mab-inversion ⊢e | t-cst-inversion ⊢e₁
-... | _ , <:ₙ-comb _ () , _ | <:ₙ-comb _ <:ₜ-□
-progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done abs
-  with t-mab-inversion ⊢e | t-abs-inversion ⊢e₁
-... | _ , <:ₙ-comb _ (<:ₜ-⇛ _ _) , _ | _ , <:ₙ-comb _ () , _
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done cst = done ((mab v· cst) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
+progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done abs = done ((mab v· abs) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-head ⊢e ⊢e₁ add-eq) | done mab | done mab = done ((mab v· mab) {λ ()} {λ ()} {λ {e₁} {e₂} ()})
 progress (t-mtc {v = v} {e = e} ⊢v val-v ⊢e ⊢s)
   with progress ⊢e
@@ -1491,6 +1465,7 @@ monoidal-confluence-value {v = v} vv {red₁ = red₁} {red₂ = red₂} mred₁
 -- ** value interpretation of types
 
 𝓥⟦ `⊥ ⟧        e  = ⊥
+𝓥⟦ `⊤ ⟧        e  = SingletonValue `⊤ e
 𝓥⟦ □ ⟧         e  = ∃[ n ] e ≡ cst n
 𝓥⟦ μ ⇒ ημ ⟧    e  = ∃[ μ₀ ]  ∃[ s ] e ≡ abs μ₀ s   × μ <:ₜ μ₀     × ∀ v → v ∈ 𝓥⟦ μ ⟧     → sub₁ v s ∈ 𝓔⟦ ημ ⟧
 𝓥⟦ ημ₁ ⇛ ημ ⟧  e  = ∃[ ημ₀ ] ∃[ s ] e ≡ mab ημ₀ s  × ημ₁ <:ₙ ημ₀  × ∀ w → w ∈ 𝓦⟦ ημ₁ ⟧  → sub₁ w s ∈ 𝓔⟦ ημ ⟧
@@ -1515,11 +1490,17 @@ ext-𝓖 σ∈𝓖 e∈𝓦 (Fin.suc x) = σ∈𝓖 x
 -- properties
 
 length-𝓥 : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → lengthE e ≡ 1
+length-𝓥 {μ = `⊤} (sv-cst _) = refl
+length-𝓥 {μ = `⊤} (sv-abs _) = refl
+length-𝓥 {μ = `⊤} (sv-mab _) = refl
 length-𝓥 {μ = □} (_ , refl) = refl
 length-𝓥 {μ = μ ⇒ ημ} (_ , _ , refl , _) = refl
 length-𝓥 {μ = ημ ⇛ ημ₁} (_ , _ , refl , _) = refl
 
 𝓥-atomic : ∀ {e}{μ} → e ∈ 𝓥⟦ μ ⟧ → atomic e
+𝓥-atomic {μ = `⊤} (sv-cst _) = cst , (λ ()) , λ ()
+𝓥-atomic {μ = `⊤} (sv-abs _) = abs , (λ ()) , λ ()
+𝓥-atomic {μ = `⊤} (sv-mab _) = mab , (λ ()) , λ ()
 𝓥-atomic {μ = □} (_ , refl) = cst , (λ ()) , λ ()
 𝓥-atomic {μ = μ ⇒ ημ} (_ , _ , refl , _) = abs , (λ ()) , λ ()
 𝓥-atomic {μ = ημ ⇛ ημ₁} (_ , _ , refl , _) = mab , (λ ()) , (λ ())
@@ -1544,12 +1525,14 @@ toAbs (μ₀ , b , refl , _ , _) = v-abs μ₀ b
 
 ¬𝓥-app : ∀ {w₁ w₂} {μ} → ¬ 𝓥⟦ μ ⟧ (app w₁ w₂)
 ¬𝓥-app {μ = `⊥} ()
+¬𝓥-app {μ = `⊤} ()
 ¬𝓥-app {μ = □} ()
 ¬𝓥-app {μ = μ ⇒ x} ()
 ¬𝓥-app {μ = x ⇛ x₁} ()
 
 ¬𝓥-mtc : ∀ {w₁ w₂ w₃} {μ} → ¬ 𝓥⟦ μ ⟧ (mtc w₁ w₂ w₃)
 ¬𝓥-mtc {μ = `⊥} ()
+¬𝓥-mtc {μ = `⊤} ()
 ¬𝓥-mtc {μ = □} ()
 ¬𝓥-mtc {μ = μ ⇒ x} ()
 ¬𝓥-mtc {μ = x ⇛ x₁} ()
@@ -1883,6 +1866,11 @@ _⊨_⦂_ : Ctx n → Expr n → NTy → Set
 <:ₙ-subset : ∀ {ημ₁ ημ₂} → ημ₁ <:ₙ ημ₂ → 𝓦⟦ ημ₁ ⟧ ⊆ 𝓦⟦ ημ₂ ⟧
 <:ₜ-subset : ∀ {μ₁ μ₂} → μ₁ <:ₜ μ₂ → 𝓥⟦ μ₁ ⟧ ⊆ 𝓥⟦ μ₂ ⟧
 
+<:ₜ-subset {μ₁ = `⊥} <:ₜ-⊤ ()
+<:ₜ-subset {μ₁ = `⊤} <:ₜ-⊤ e∈𝓥⟦μ₁⟧ = e∈𝓥⟦μ₁⟧
+<:ₜ-subset {μ₁ = □} <:ₜ-⊤ (n , refl) = sv-cst <:ₜ-⊤
+<:ₜ-subset {μ₁ = μ ⇒ ημ} <:ₜ-⊤ (μ₀ , s , refl , _ , _) = sv-abs (<:ₜ-⊤ {μ = μ₀ ⇒ ημ})
+<:ₜ-subset {μ₁ = ημ ⇛ ημ′} <:ₜ-⊤ (ημ₀ , s , refl , _ , _) = sv-mab (<:ₜ-⊤ {μ = ημ₀ ⇛ ημ′})
 <:ₜ-subset <:ₜ-□ e∈𝓥⟦μ₁⟧ = e∈𝓥⟦μ₁⟧
 <:ₜ-subset (<:ₜ-⇒ μ₂<:μ₁ ημ₁<:ημ₂) (μ₀ , e , x≡ , μ₁<:μ₀ , ∀v∈𝓥) = μ₀ , e , x≡ , (<:ₜ-trans μ₂<:μ₁ μ₁<:μ₀) , (λ v v∈𝓥⟦μ₁⟧ → <:ₙ-subset-𝓔 ημ₁<:ημ₂ (∀v∈𝓥 v (<:ₜ-subset μ₂<:μ₁ v∈𝓥⟦μ₁⟧)))
 <:ₜ-subset (<:ₜ-⇛ ημ₁′<:ημ₁ ημ₂<:ημ₂′) (ημ₀ , e , x≡ , ημ₁<:ημ₀ , ∀w∈𝓦) = ημ₀ , e , x≡ , (<:ₙ-trans ημ₁′<:ημ₁ ημ₁<:ημ₀) , (λ w w∈𝓦⟦ημ₁⟧ → <:ₙ-subset-𝓔 ημ₂<:ημ₂′ (∀w∈𝓦 w (<:ₙ-subset ημ₁′<:ημ₁ w∈𝓦⟦ημ₁⟧)))
